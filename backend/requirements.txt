@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiosqlite
+python-dotenv
+ebooklib
+beautifulsoup4
+pymupdf
+google-generativeai
+python-multipart
+aiofiles
