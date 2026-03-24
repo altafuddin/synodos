@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
@@ -42,6 +43,12 @@ class ChatMessage(Base):
 
 
 async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+@asynccontextmanager
+async def get_db_context():
     async with AsyncSessionLocal() as session:
         yield session
 
