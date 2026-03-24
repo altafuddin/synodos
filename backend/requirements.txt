@@ -6,6 +6,9 @@ python-dotenv
 ebooklib
 beautifulsoup4
 pymupdf
-google-generativeai
+google-genai
 python-multipart
 aiofiles
+pytest
+pytest-asyncio
+httpx

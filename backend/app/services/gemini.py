@@ -1,7 +1,7 @@
 import asyncio
 from typing import AsyncGenerator
 
-import google.generativeai as genai
+from google import genai
 
 
 SYSTEM_PROMPT = """You are a reading assistant for a book reader app. You only know what the user has read so far — the text provided below. Do not reference or speculate about anything beyond it. Answer questions helpfully and concisely based only on the reading buffer below.
@@ -11,19 +11,18 @@ Reading buffer:
 
 
 def _generate_sync(question, buffer_text, chat_history, api_key):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        "gemini-2.5-flash",
-        system_instruction=SYSTEM_PROMPT.format(buffer_text=buffer_text),
-    )
+    client = genai.Client(api_key=api_key)
 
     contents = list(chat_history)
     contents.append({"role": "user", "parts": [{"text": question}]})
 
-    response = model.generate_content(
-        contents,
-        stream=True,
-        generation_config={"max_output_tokens": 1024},
+    response = client.models.generate_content_stream(
+        model="gemini-2.5-flash",
+        contents=contents,
+        config={
+            "system_instruction": SYSTEM_PROMPT.format(buffer_text=buffer_text),
+            "max_output_tokens": 1024,
+        },
     )
 
     chunks = []
