@@ -106,3 +106,45 @@ Layered — one layer at a time, verified before proceeding:
 4. Books router — all 5 book endpoints
 5. Buffer service + progress router
 6. Gemini service + chat router
+
+
+## Frontend Stack
+
+- **Framework:** React Native + Expo
+- **EPUB rendering:** `@epubjs-react-native` (via WebView)
+- **PDF rendering:** `react-native-pdf` (native engine)
+- **File picker:** `expo-document-picker`
+- **File storage:** `expo-file-system`
+- **Entry point:** `frontend/App.tsx`
+
+## Frontend Folder Structure
+```
+frontend/
+├── App.tsx
+├── app.json
+├── package.json
+├── .env                        ← never committed
+├── .env.example
+└── src/
+    ├── screens/
+    │   ├── LibraryScreen.tsx
+    │   ├── ReaderScreen.tsx
+    │   └── ChatOverlay.tsx
+    ├── components/
+    ├── services/
+    │   └── api.ts              ← all backend calls
+    └── hooks/
+```
+
+## Frontend Commands
+```bash
+cd frontend
+npm install
+npx expo start                  # start dev server
+npx expo run:android            # run on Android
+```
+
+## Environment Variables (frontend/.env)
+```
+EXPO_PUBLIC_API_URL=http://localhost:8000
+```
