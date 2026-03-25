@@ -9,15 +9,15 @@ Synodos — an AI-powered mobile book reader. Users pick EPUB or PDF books from 
 ## Monorepo Structure
 ```
 synodos/
-├── backend/    ← FastAPI backend (active development)
-└── frontend/   ← React Native + Expo (deferred — not started yet)
+├── backend/    ← FastAPI backend (complete — 28/28 tests passing)
+└── frontend/   ← React Native + Expo (Phase 2 — active development)
 ```
 
 ## Backend Stack
 
 - **Framework:** FastAPI
 - **Database:** SQLite via SQLAlchemy (async) + aiosqlite
-- **AI:** Google Gemini 2.5 Flash (`google-generativeai`)
+- **AI:** Google Gemini 2.5 Flash (`google-genai`)
 - **Parsing:** ebooklib (EPUB), PyMuPDF/fitz (PDF)
 - **Entry point:** `backend/main.py`
 - **Server:** `uvicorn main:app --reload` (run from inside `backend/`)
@@ -63,7 +63,7 @@ MAX_UPLOAD_SIZE_MB=50
 - OS: Linux
 - Python: Miniconda, env named `synodos`
 - Activate: `conda activate synodos`
-- Node.js: v23.10.0 (for Claude Code only — not used by backend)
+- Node.js: v23.10.0
 
 ## Backend Commands
 ```bash
@@ -77,7 +77,8 @@ uvicorn main:app --reload          # start dev server (default: localhost:8000)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | /api/books | Upload + parse book |
+| POST | /api/books/epub | Upload + parse EPUB |
+| POST | /api/books/pdf | Upload + parse PDF |
 | GET | /api/books | List library |
 | GET | /api/books/{book_id} | Book details + read positions |
 | PATCH | /api/books/{book_id} | Edit title/author |
@@ -97,7 +98,7 @@ uvicorn main:app --reload          # start dev server (default: localhost:8000)
 - All file I/O must be async (aiofiles) or run in a threadpool executor.
 - Storage path must always be read from the STORAGE_PATH env var, never hardcoded.
 
-## Build Approach
+## Backend Build Approach (Complete)
 
 Layered — one layer at a time, verified before proceeding:
 1. Foundation — database.py, main.py, requirements.txt, server boots
@@ -106,45 +107,119 @@ Layered — one layer at a time, verified before proceeding:
 4. Books router — all 5 book endpoints
 5. Buffer service + progress router
 6. Gemini service + chat router
+7. Unit tests — 28/28 passing
 
+---
 
 ## Frontend Stack
 
 - **Framework:** React Native + Expo
-- **EPUB rendering:** `@epubjs-react-native` (via WebView)
-- **PDF rendering:** `react-native-pdf` (native engine)
+- **Navigation:** Expo Router (file-based routing)
+- **State management:** Zustand
+- **UI components:** React Native Paper + custom dark/sepia/light theme
+- **EPUB rendering:** `react-native-readium` (Readium Kotlin Toolkit — fully native Android engine)
+- **PDF rendering:** `react-native-pdf` (native Android PdfRenderer)
+- **Chat overlay:** `@gorhom/bottom-sheet` (half-screen draggable, snap points)
 - **File picker:** `expo-document-picker`
 - **File storage:** `expo-file-system`
-- **Entry point:** `frontend/App.tsx`
+- **Entry point:** `frontend/app/_layout.tsx`
 
 ## Frontend Folder Structure
 ```
 frontend/
-├── App.tsx
-├── app.json
+├── app.json                         ← Expo config (name, version, plugins)
+├── eas.json                         ← EAS Build profiles (development, preview, production)
 ├── package.json
-├── .env                        ← never committed
+├── tsconfig.json
+├── .env                             ← Backend URL (never committed)
 ├── .env.example
+│
 └── src/
-    ├── screens/
-    │   ├── LibraryScreen.tsx
-    │   ├── ReaderScreen.tsx
-    │   └── ChatOverlay.tsx
+    ├── app/                         ← Expo Router screens (file path = route)
+    │   ├── _layout.tsx              ← Root layout — PaperProvider, GestureHandlerRootView, BottomSheetModalProvider
+    │   ├── index.tsx                ← Library screen
+    │   └── reader/
+    │       └── [bookId].tsx         ← Reader screen + chat bottom sheet overlay
+    │
     ├── components/
+    │   ├── LibraryCard.tsx          ← Book card in library list
+    │   ├── UploadModal.tsx          ← File picker + upload progress
+    │   ├── ReaderEpub.tsx           ← EPUB renderer (react-native-readium)
+    │   ├── ReaderPdf.tsx            ← PDF renderer (react-native-pdf)
+    │   ├── ChatSheet.tsx            ← Bottom sheet chat overlay (@gorhom/bottom-sheet)
+    │   ├── ChatMessage.tsx          ← Individual message bubble (user / assistant)
+    │   └── ChatInput.tsx            ← Text input + send button inside the sheet
+    │
+    ├── stores/
+    │   └── bookStore.ts             ← Zustand store — library, active book, theme, progress
+    │
     ├── services/
-    │   └── api.ts              ← all backend calls
-    └── hooks/
+    │   ├── api.ts                   ← Base fetch config, shared request helpers
+    │   ├── books.ts                 ← uploadBook, listBooks, getBook, patchBook, deleteBook
+    │   ├── progress.ts              ← reportProgress
+    │   ├── chat.ts                  ← askQuestion (streaming), getChatHistory
+    │   └── fileStorage.ts           ← expo-file-system: copy, read, delete local files
+    │
+    ├── hooks/
+    │   ├── useReader.ts             ← Scroll tracking, progress reporting, position state
+    │   └── useChat.ts               ← Chat state, message history, streaming handler
+    │
+    ├── constants/
+    │   ├── api.ts                   ← Base URL config (emulator / device / production)
+    │   └── themes.ts                ← Dark, sepia, and light theme definitions for RN Paper
+    │
+    └── types/
+        └── index.ts                 ← Book, ChatMessage, ReadPositions, ApiResponse types
+```
+
+## Environment Variables (frontend/.env)
+```
+# Android emulator
+EXPO_PUBLIC_API_URL=http://10.0.2.2:8000
+
+# Physical device on local network — replace with your machine's LAN IP
+# EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
+
+# Production (Phase 3)
+# EXPO_PUBLIC_API_URL=https://api.your-domain.com
 ```
 
 ## Frontend Commands
 ```bash
 cd frontend
-npm install
-npx expo start                  # start dev server
-npx expo run:android            # run on Android
+npm install                          # install dependencies
+npx expo start --dev-client          # start dev server (requires custom dev build installed)
+eas build --platform android --profile development  # build custom dev APK (one-time setup)
 ```
 
-## Environment Variables (frontend/.env)
-```
-EXPO_PUBLIC_API_URL=http://localhost:8000
-```
+## Custom Dev Build (Required)
+
+Three libraries require native compilation — they cannot run in Expo Go:
+- `react-native-readium` — Readium Kotlin Toolkit (requires JDK 17)
+- `react-native-pdf` — native Android PdfRenderer
+- `@gorhom/bottom-sheet` — Reanimated + Gesture Handler
+
+Build once with EAS, install the APK on device, then use `npx expo start --dev-client` for all development. Rebuild only when adding new native libraries or changing native config.
+
+See TAD → Custom Dev Build Setup for full instructions.
+
+## Frontend Build Layers
+
+1. Foundation — Expo init, Expo Router, folder structure, RN Paper theme, API config, EAS custom dev build
+2. Library screen — Zustand store, API service, book list UI
+3. Upload flow — file picker, file system copy, POST to backend
+4. EPUB reader — react-native-readium, chapter nav, progress reporting
+5. PDF reader — react-native-pdf, page nav, progress reporting
+6. Chat overlay — @gorhom/bottom-sheet, streaming consumer, history loading
+7. Polish + integration — transitions, loading states, full end-to-end testing
+
+## Frontend Key Design Rules
+
+- **components/** are pure UI — props in, render out. No API calls inside components.
+- **services/** is where all network and file system calls live. Never call `fetch` directly from a component.
+- **hooks/** contains stateful behaviours that span components (reading, chat).
+- **Zustand store** is the single source of truth for shared state — library list, active book, reading theme.
+- **API base URL** always comes from `constants/api.ts` — never hardcoded elsewhere.
+- **Progress reporting** fires at every 5% scroll threshold — `unit_id` (chapter id for EPUB, `page_N` for PDF) + `scroll_pct` (0–100 integer).
+- **Chat streaming** consumes `text/event-stream` — render tokens as they arrive, handle `[DONE]` to re-enable input.
+- **All book_id values** are UUID strings from the backend.
