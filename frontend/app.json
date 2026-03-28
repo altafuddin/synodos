@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Synodos",
+    "slug": "synodos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "synodos",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0d0d0d"
+      },
+      "package": "com.synodos.app"
+    },
+    "plugins": [
+      ["expo-router", { "root": "./src/app" }],
+      "expo-document-picker",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 35
+          }
+        }
+      ],
+      "./plugins/withReadiumDesugaring"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "root": "./src/app"
+      },
+      "eas": {
+        "projectId": "cca6c855-c6a7-402f-8d22-fdb7cfd2ba99"
+      }
+    }
+  }
+}
