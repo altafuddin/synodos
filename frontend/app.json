@@ -26,7 +26,8 @@
           }
         }
       ],
-      "./plugins/withReadiumDesugaring"
+      "./plugins/withReadiumDesugaring",
+      "./plugins/withCleartextTraffic"
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,14 +1,20 @@
 export interface Book {
-  id: string;
+  book_id: string;
   title: string;
-  author: string;
+  author: string | null;
   format: 'epub' | 'pdf';
   total_units: number;
-  created_at: string;
-  read_positions: Record<string, number>;
+  uploaded_at: string;
+  last_read_at: string | null;
+}
+
+export interface BookDetail extends Book {
+  current_position: string | null;
+  read_positions: ReadPositions;
 }
 
 export interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
@@ -19,7 +25,7 @@ export interface ReadPositions {
 }
 
 export interface ApiResponse<T> {
-  data?: T;
+  data: T;
   error?: string;
 }
 
