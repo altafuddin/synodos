@@ -77,8 +77,7 @@ uvicorn main:app --reload          # start dev server (default: localhost:8000)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | /api/books/epub | Upload + parse EPUB |
-| POST | /api/books/pdf | Upload + parse PDF |
+| POST | /api/books | Upload + parse (EPUB or PDF — format inferred from filename extension; multipart field name `file`) |
 | GET | /api/books | List library |
 | GET | /api/books/{book_id} | Book details + read positions |
 | PATCH | /api/books/{book_id} | Edit title/author |
