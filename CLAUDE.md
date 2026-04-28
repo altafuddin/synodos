@@ -219,6 +219,7 @@ See TAD → Custom Dev Build Setup for full instructions.
 - **hooks/** contains stateful behaviours that span components (reading, chat).
 - **Zustand store** is the single source of truth for shared state — library list, active book, reading theme.
 - **API base URL** always comes from `constants/api.ts` — never hardcoded elsewhere.
+- **Upload size limit** is mirrored in `constants/api.ts` (`MAX_UPLOAD_SIZE_MB`) and must match the backend env var of the same name. Backend's HTTP 413 path is the safety net for any drift.
 - **Progress reporting** fires at every 5% scroll threshold — `unit_id` (chapter id for EPUB, `page_N` for PDF) + `scroll_pct` (0–100 integer).
 - **Chat streaming** consumes `text/event-stream` — render tokens as they arrive, handle `[DONE]` to re-enable input.
 - **All book_id values** are UUID strings from the backend.
