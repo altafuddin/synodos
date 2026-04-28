@@ -4,4 +4,8 @@
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:8000';
 
+// Must match MAX_UPLOAD_SIZE_MB env var on the backend.
+export const MAX_UPLOAD_SIZE_MB = 50;
+export const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
+
 export default API_BASE_URL;

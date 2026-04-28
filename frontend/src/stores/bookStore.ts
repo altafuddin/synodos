@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { Book } from '../types';
 import type { ThemeName } from '../constants/themes';
-import { listBooks } from '../services/books';
+import { deleteBook, listBooks } from '../services/books';
+import { deleteBookFile } from '../services/fileStorage';
 
 interface BookStore {
   books: Book[];
@@ -13,11 +14,12 @@ interface BookStore {
   fetchBooks: () => Promise<void>;
   setActiveBook: (bookId: string | null) => void;
   setTheme: (theme: ThemeName) => void;
-  removeBook: (bookId: string) => void;
+  addBook: (book: Book) => void;
+  removeBook: (bookId: string) => Promise<void>;
   clearError: () => void;
 }
 
-export const useBookStore = create<BookStore>((set) => ({
+export const useBookStore = create<BookStore>((set, get) => ({
   books: [],
   activeBookId: null,
   theme: 'dark',
@@ -39,10 +41,28 @@ export const useBookStore = create<BookStore>((set) => ({
 
   setTheme: (theme) => set({ theme }),
 
-  removeBook: (bookId) =>
+  addBook: (book) =>
+    set((state) => ({
+      books: [book, ...state.books],
+    })),
+
+  removeBook: async (bookId) => {
+    const format = get().books.find((b) => b.book_id === bookId)?.format;
+
+    await deleteBook(bookId);
+
     set((state) => ({
       books: state.books.filter((b) => b.book_id !== bookId),
-    })),
+    }));
+
+    if (format) {
+      void deleteBookFile(bookId, format);
+    } else {
+      console.warn(
+        `removeBook: book ${bookId} not in store; skipping local file cleanup (format unknown).`
+      );
+    }
+  },
 
   clearError: () => set({ error: null }),
 }));

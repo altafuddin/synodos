@@ -1,15 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import { ActivityIndicator, Text, FAB, Banner, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
 import LibraryCard from '../components/LibraryCard';
+import UploadModal from '../components/UploadModal';
 import type { Book } from '../types';
 
 export default function LibraryScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { books, isLoading, error, fetchBooks, clearError } = useBookStore();
+  const [uploadVisible, setUploadVisible] = useState(false);
 
   useEffect(() => {
     fetchBooks();
@@ -65,7 +67,12 @@ export default function LibraryScreen() {
         label="Add Book"
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         color={theme.colors.onPrimary}
-        onPress={() => console.log('add book tapped')}
+        onPress={() => setUploadVisible(true)}
+      />
+
+      <UploadModal
+        visible={uploadVisible}
+        onDismiss={() => setUploadVisible(false)}
       />
     </View>
   );
