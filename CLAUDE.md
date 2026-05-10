@@ -202,12 +202,20 @@ Build once with EAS, install the APK on device, then use `npx expo start --dev-c
 
 See TAD → Custom Dev Build Setup for full instructions.
 
+## Config Plugins
+
+Two custom plugins live in frontend/plugins/ — do not use expo-build-properties for these, it silently ignores some options:
+- withReadiumDesugaring.js — enables coreLibraryDesugaring, desugar_jdk_libs, and explicit kotlinx-datetime:0.6.1 dependency (required by Readium Kotlin Toolkit v3)
+- withCleartextTraffic.js — Android HTTP cleartext for local dev
+
+Both use the withAppBuildGradle/withAndroidManifest pattern.
+
 ## Frontend Build Layers
 
 1. Foundation — Expo init, Expo Router, folder structure, RN Paper theme, API config, EAS custom dev build
 2. Library screen — Zustand store, API service, book list UI
 3. Upload flow — file picker, file system copy, POST to backend
-4. EPUB reader — react-native-readium, chapter nav, progress reporting
+4. EPUB reader — react-native-readium, chapter nav, progress reporting ✅ complete (blocked on BUG-006)
 5. PDF reader — react-native-pdf, page nav, progress reporting
 6. Chat overlay — @gorhom/bottom-sheet, streaming consumer, history loading
 7. Polish + integration — transitions, loading states, full end-to-end testing
