@@ -33,3 +33,16 @@ export interface ProgressPayload {
   unit_id: string;
   scroll_pct: number;
 }
+
+export interface LocatorLocations {
+  progression: number;
+  position?: number;
+  totalProgression?: number;
+}
+
+export interface Locator {
+  href: string;
+  type: string;
+  title?: string;
+  locations?: LocatorLocations;
+}

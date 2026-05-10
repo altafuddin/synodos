@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
-import { ActivityIndicator, Text, FAB, Banner, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Text, FAB, Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
 import LibraryCard from '../components/LibraryCard';
@@ -12,6 +12,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const { books, isLoading, error, fetchBooks, clearError } = useBookStore();
   const [uploadVisible, setUploadVisible] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   useEffect(() => {
     fetchBooks();
@@ -20,7 +21,13 @@ export default function LibraryScreen() {
   const renderItem = ({ item }: { item: Book }) => (
     <LibraryCard
       book={item}
-      onPress={() => router.push(`/reader/${item.book_id}`)}
+      onPress={() => {
+        if (item.format === 'epub') {
+          router.push(`/reader/${item.book_id}`);
+        } else {
+          setSnackbarVisible(true);
+        }
+      }}
     />
   );
 
@@ -74,6 +81,14 @@ export default function LibraryScreen() {
         visible={uploadVisible}
         onDismiss={() => setUploadVisible(false)}
       />
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        PDF reader coming soon
+      </Snackbar>
     </View>
   );
 }

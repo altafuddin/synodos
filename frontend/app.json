@@ -14,7 +14,12 @@
       "package": "com.synodos.app"
     },
     "plugins": [
-      ["expo-router", { "root": "./src/app" }],
+      [
+        "expo-router",
+        {
+          "root": "./src/app"
+        }
+      ],
       "expo-document-picker",
       [
         "expo-build-properties",
@@ -39,6 +44,9 @@
       "eas": {
         "projectId": "cca6c855-c6a7-402f-8d22-fdb7cfd2ba99"
       }
+    },
+    "ios": {
+      "bundleIdentifier": "com.synodos.app"
     }
   }
 }

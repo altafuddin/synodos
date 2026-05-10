@@ -32,6 +32,17 @@ module.exports = function withReadiumDesugaring(config) {
       );
     }
 
+    // Add kotlinx-datetime explicit dependency if not already present
+    // Required because Readium Kotlin Toolkit pulls it transitively but it is
+    // not always packaged into the APK DEX, causing a runtime NoClassDefFoundError.
+    const gradleAfterDesugar = config.modResults.contents;
+    if (!gradleAfterDesugar.includes('kotlinx-datetime')) {
+      config.modResults.contents = gradleAfterDesugar.replace(
+        /dependencies\s*\{/,
+        `dependencies {\n    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")`
+      );
+    }
+
     return config;
   });
 };
