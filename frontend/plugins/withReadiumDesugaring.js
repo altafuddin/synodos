@@ -32,15 +32,21 @@ module.exports = function withReadiumDesugaring(config) {
       );
     }
 
-    // Add kotlinx-datetime explicit dependency if not already present
-    // Required because Readium Kotlin Toolkit pulls it transitively but it is
-    // not always packaged into the APK DEX, causing a runtime NoClassDefFoundError.
-    const gradleAfterDesugar = config.modResults.contents;
-    if (!gradleAfterDesugar.includes('kotlinx-datetime')) {
-      config.modResults.contents = gradleAfterDesugar.replace(
-        /dependencies\s*\{/,
-        `dependencies {\n    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")`
-      );
+    // BUG-006 fix: force kotlinx-datetime to 0.6.x at the top level (sibling to
+    // android {} / dependencies {}). Readium 3.1.0 references kotlinx.datetime.Instant,
+    // which was removed in 0.7.0 (moved to kotlin.time.Instant). A plain implementation
+    // pin loses to Gradle's highest-version conflict resolution, so we force it instead.
+    const contents = config.modResults.contents;
+    if (!contents.includes('BUG-006 fix')) {
+      config.modResults.contents = contents + `
+// BUG-006 fix: pin kotlinx-datetime to 0.6.x — Readium 3.1.0 references kotlinx.datetime.Instant, removed in 0.7.0
+configurations.all {
+    resolutionStrategy {
+        force "org.jetbrains.kotlinx:kotlinx-datetime:0.6.1"
+        force "org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.6.1"
+    }
+}
+`;
     }
 
     return config;

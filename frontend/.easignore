@@ -1,0 +1,29 @@
+# EAS regenerates these on the build server
+node_modules/
+android/
+ios/
+.expo/
+.git/
+
+# local artifacts
+*.apk
+*.aab
+dist/
+web-build/
+
+# secrets / signing (were covered by .gitignore, which .easignore now overrides)
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+.env*.local
+
+# junk
+.DS_Store
+*.tsbuildinfo
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.kotlin/
