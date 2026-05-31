@@ -205,10 +205,12 @@ See TAD → Custom Dev Build Setup for full instructions.
 ## Config Plugins
 
 Two custom plugins live in frontend/plugins/ — do not use expo-build-properties for these, it silently ignores some options:
-- withReadiumDesugaring.js — enables coreLibraryDesugaring, desugar_jdk_libs, and explicit kotlinx-datetime:0.6.1 dependency (required by Readium Kotlin Toolkit v3)
+- withReadiumDesugaring.js — enables core library desugaring (coreLibraryDesugaringEnabled + desugar_jdk_libs:2.1.2) and pins kotlinx-datetime to 0.6.1 via a top-level resolutionStrategy.force block (forcing both the base and -jvm coordinates) — required by Readium Kotlin Toolkit v3
 - withCleartextTraffic.js — Android HTTP cleartext for local dev
 
 Both use the withAppBuildGradle/withAndroidManifest pattern.
+
+- **Downgrading a transitive native dependency requires `resolutionStrategy.force`, not `implementation`.** A plain `implementation("group:name:version")` only adds a candidate to the dependency graph — when a transitive dependency requests a higher version, Gradle's default highest-version-wins resolution still picks the higher one. Use `configurations.all { resolutionStrategy { force "..." } }` (or a `strictly` constraint) to override conflict resolution unconditionally. For Android, force both the base coordinate and the `-jvm` platform variant. Established fixing BUG-006: kotlinx-datetime floated to 0.7.x (which removed `kotlinx.datetime.Instant`) while Readium 3.1.0 was compiled against 0.6.x — forcing 0.6.1 resolved it. Note also: Expo applies `withAppBuildGradle` multiple times per prebuild, so any gradle injection must be guarded against duplication.
 
 ## Frontend Build Layers
 
