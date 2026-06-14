@@ -37,6 +37,7 @@ class BookDetail(BaseModel):
     format: Literal["epub", "pdf"]
     total_units: int
     current_position: str | None
+    current_progression: int | None
     read_positions: dict[str, int]
     uploaded_at: datetime
     last_read_at: datetime | None

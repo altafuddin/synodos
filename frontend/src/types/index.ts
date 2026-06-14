@@ -10,6 +10,7 @@ export interface Book {
 
 export interface BookDetail extends Book {
   current_position: string | null;
+  current_progression: number | null;
   read_positions: ReadPositions;
 }
 

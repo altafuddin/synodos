@@ -60,24 +60,14 @@ export default function ReaderScreen() {
   }, [bookId, setActiveBook]);
 
   const initialLocator = useMemo<Locator | undefined>(() => {
-    if (!bookDetail) return undefined;
-    const entries = Object.entries(bookDetail.read_positions);
-    if (entries.length === 0) return undefined;
+    const href = bookDetail?.current_position;
+    if (!href) return undefined; // fresh book → no resume
 
-    let bestUnit = entries[0][0];
-    let bestPct = entries[0][1];
-    for (const [unitId, pct] of entries) {
-      if (pct > bestPct) {
-        bestPct = pct;
-        bestUnit = unitId;
-      }
-    }
-    if (bestPct === 0) return undefined;
-
+    const pct = bookDetail?.current_progression ?? 0;
     return {
-      href: bestUnit,
+      href,
       type: 'text/html',
-      locations: { progression: bestPct / 100 },
+      locations: { progression: pct / 100 },
     };
   }, [bookDetail]);
 

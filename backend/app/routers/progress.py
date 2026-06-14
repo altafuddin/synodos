@@ -35,6 +35,11 @@ async def report_progress(
         raise HTTPException(status_code=400, detail=str(e))
 
     book.last_read_at = datetime.now(timezone.utc)
+    # Resume cursor — tracks where the user currently is, set unconditionally
+    # (even on backward / non-advancing moves where append_to_buffer returned
+    # False). Decoupled from the buffer's monotonic high-water mark by design.
+    book.current_position = request.unit_id
+    book.current_progression = request.scroll_pct
     await db.commit()
 
     return ProgressResponse(

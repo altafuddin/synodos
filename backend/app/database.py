@@ -28,6 +28,7 @@ class Book(Base):
     format = Column(String, nullable=False)          # 'epub' or 'pdf'
     total_units = Column(Integer, nullable=False)
     current_position = Column(String, nullable=True)
+    current_progression = Column(Integer, nullable=True)
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_read_at = Column(DateTime, nullable=True)
 
