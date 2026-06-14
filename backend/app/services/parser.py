@@ -1,6 +1,10 @@
+import io
 import os
+import posixpath
 import tempfile
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import ebooklib
 from bs4 import BeautifulSoup
@@ -8,7 +12,27 @@ from ebooklib import epub
 import fitz
 
 
+def _opf_dir(file_bytes: bytes) -> str:
+    """Directory holding the OPF, relative to the EPUB (zip) root.
+
+    ebooklib's item.get_name() is relative to the OPF file, while Readium
+    emits hrefs relative to the container root. The difference is exactly
+    this directory ("OEBPS" for Heart Lamp, "" for a root-level OPF).
+    """
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        container = zf.read("META-INF/container.xml")
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+    root = ET.fromstring(container)
+    rootfile = root.find(".//c:rootfile", ns)
+    if rootfile is None:
+        raise ValueError("EPUB container.xml has no rootfile")
+    full_path = rootfile.get("full-path", "")
+    return posixpath.dirname(full_path)
+
+
 def parse_epub(file_bytes: bytes) -> list[dict]:
+    opf_dir = _opf_dir(file_bytes)
+
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".epub")
     try:
         tmp.write(file_bytes)
@@ -29,11 +53,13 @@ def parse_epub(file_bytes: bytes) -> list[dict]:
         if not text:
             continue
 
-        file_name = Path(item.get_name()).stem
-        title = getattr(item, "title", None) or file_name
+        # Container-root-relative href, matching Readium's locator.href on the
+        # frontend (e.g. "OEBPS/heart-lamp-1.xhtml", "text/part0000.html").
+        unit_id = posixpath.normpath(posixpath.join(opf_dir, item.get_name()))
+        title = getattr(item, "title", None) or Path(item.get_name()).stem
 
         units.append({
-            "id": file_name,
+            "id": unit_id,
             "title": title,
             "text": text,
             "char_count": len(text),
