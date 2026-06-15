@@ -7,7 +7,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { File } from 'expo-file-system';
 import type { ReadiumViewRef } from 'react-native-readium';
 import { getBook } from '../../services/books';
@@ -84,6 +84,7 @@ export default function ReaderScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
         <View style={styles.headerRow}>
           <IconButton
