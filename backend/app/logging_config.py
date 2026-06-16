@@ -91,3 +91,9 @@ def setup_logging() -> None:
         lg = logging.getLogger(name)
         lg.handlers.clear()
         lg.propagate = True
+        # Our synodos.request middleware already logs method/path/status/duration
+        # per request, so uvicorn.access's INFO "GET / HTTP/1.1 200" lines are
+        # redundant. Lift its level to WARNING (don't disable) so genuine
+        # warnings/errors still surface.
+        if name == "uvicorn.access":
+            lg.setLevel(logging.WARNING)
