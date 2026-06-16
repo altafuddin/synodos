@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 
+import structlog
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -14,6 +15,7 @@ load_dotenv()
 STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
 
 router = APIRouter(prefix="/api/books", tags=["progress"])
+log = structlog.get_logger("synodos.progress")
 
 
 @router.post("/{book_id}/progress", response_model=ProgressResponse)
@@ -22,9 +24,17 @@ async def report_progress(
     request: ProgressRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    log.debug(
+        "progress_received",
+        book_id=book_id,
+        unit_id=request.unit_id,
+        scroll_pct=request.scroll_pct,
+    )
+
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if book is None:
+        log.warning("book_not_found", book_id=book_id, op="progress")
         raise HTTPException(status_code=404, detail="Book not found")
 
     try:

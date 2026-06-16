@@ -7,9 +7,12 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import ebooklib
+import structlog
 from bs4 import BeautifulSoup
 from ebooklib import epub
 import fitz
+
+log = structlog.get_logger("synodos.parser")
 
 
 def _opf_dir(file_bytes: bytes) -> str:
@@ -97,6 +100,8 @@ def parse_book(file_bytes: bytes, filename: str) -> tuple[list[dict], str, str, 
     suffix = Path(filename).suffix.lower()
     stem = Path(filename).stem
 
+    log.info("parse_start", filename=filename, suffix=suffix)
+
     if suffix == ".epub":
         manifest = parse_epub(file_bytes)
 
@@ -114,6 +119,14 @@ def parse_book(file_bytes: bytes, filename: str) -> tuple[list[dict], str, str, 
         creators = book.get_metadata("DC", "creator")
         author = creators[0][0] if creators else "Unknown"
 
+        log.info(
+            "parse_complete",
+            filename=filename,
+            format="epub",
+            unit_count=len(manifest),
+            total_chars=sum(item["char_count"] for item in manifest),
+        )
+
         return manifest, title, author, "epub"
 
     elif suffix == ".pdf":
@@ -128,6 +141,14 @@ def parse_book(file_bytes: bytes, filename: str) -> tuple[list[dict], str, str, 
             author = meta_author if meta_author else "Unknown"
         finally:
             doc.close()
+
+        log.info(
+            "parse_complete",
+            filename=filename,
+            format="pdf",
+            unit_count=len(manifest),
+            total_chars=sum(item["char_count"] for item in manifest),
+        )
 
         return manifest, title, author, "pdf"
 

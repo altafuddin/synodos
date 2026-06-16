@@ -30,6 +30,7 @@ def setup_logging() -> None:
     # same level/timestamp/request_id treatment as an app line.
     shared_processors = [
         structlog.contextvars.merge_contextvars,  # injects bound request_id
+        structlog.stdlib.add_logger_name,  # renders logger=synodos.<comp>
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
     ]

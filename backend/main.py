@@ -60,6 +60,15 @@ async def log_requests(request: Request, call_next):
             duration_ms=duration_ms,
         )
         return response
+    except Exception:
+        # Capture unhandled 500s, then re-raise so FastAPI's handlers still run.
+        _request_log.error(
+            "request_failed",
+            method=request.method,
+            path=request.url.path,
+            exc_info=True,
+        )
+        raise
     finally:
         # Always unbind so ids never leak into the next request on this worker.
         structlog.contextvars.clear_contextvars()

@@ -2,9 +2,12 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+import structlog
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+log = structlog.get_logger("synodos.db")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./app.db")
 
@@ -57,3 +60,4 @@ async def get_db_context():
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    log.info("db_initialized")

@@ -1,7 +1,9 @@
 import os
+import time
 from datetime import datetime, timezone
 
 import aiofiles
+import structlog
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -21,6 +23,7 @@ STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 router = APIRouter(prefix="/api/books", tags=["chat"])
+log = structlog.get_logger("synodos.chat")
 
 
 @router.post("/{book_id}/chat")
@@ -29,19 +32,27 @@ async def ask_question(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    log.info(
+        "chat_request", book_id=book_id, question_chars=len(request.question)
+    )
+
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if book is None:
+        log.warning("book_not_found", book_id=book_id, op="chat")
         raise HTTPException(status_code=404, detail="Book not found")
 
     if not GEMINI_API_KEY:
+        log.error("gemini_key_missing", book_id=book_id)
         raise HTTPException(status_code=503, detail="Gemini API key not configured")
 
     buffer_path = f"{STORAGE_PATH}/books/{book_id}/buffer.txt"
     try:
         async with aiofiles.open(buffer_path, "r") as f:
             buffer_text = await f.read()
+        log.debug("chat_buffer_loaded", book_id=book_id, buffer_chars=len(buffer_text))
     except FileNotFoundError:
+        log.warning("chat_buffer_missing", book_id=book_id)
         buffer_text = ""
 
     history_result = await db.execute(
@@ -58,8 +69,18 @@ async def ask_question(
         }
         for msg in history_rows
     ]
+    log.debug(
+        "chat_history_loaded", book_id=book_id, message_count=len(gemini_history)
+    )
 
     async def generate():
+        start = time.perf_counter()
+        log.info(
+            "chat_stream_start",
+            book_id=book_id,
+            buffer_chars=len(buffer_text),
+            history_count=len(gemini_history),
+        )
         full_response = []
         try:
             async for chunk in stream_answer(
@@ -68,6 +89,7 @@ async def ask_question(
                 full_response.append(chunk)
                 yield f"data: {chunk}\n\n"
         except Exception:
+            log.error("chat_stream_failed", book_id=book_id, exc_info=True)
             yield "data: [ERROR]\n\n"
             return
 
@@ -91,6 +113,12 @@ async def ask_question(
                 )
             )
             await session.commit()
+        log.info(
+            "chat_completed",
+            book_id=book_id,
+            answer_chars=len(answer),
+            duration_ms=round((time.perf_counter() - start) * 1000, 2),
+        )
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
@@ -104,6 +132,7 @@ async def get_chat_history(
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if book is None:
+        log.warning("book_not_found", book_id=book_id, op="history")
         raise HTTPException(status_code=404, detail="Book not found")
 
     history_result = await db.execute(
@@ -112,6 +141,8 @@ async def get_chat_history(
         .order_by(ChatMessage.created_at.asc())
     )
     messages = history_result.scalars().all()
+
+    log.debug("chat_history_returned", book_id=book_id, count=len(messages))
 
     return ChatHistoryResponse(
         book_id=book_id,
