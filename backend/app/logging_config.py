@@ -88,13 +88,16 @@ def setup_logging() -> None:
         "uvicorn.error",
         "sqlalchemy",
         "sqlalchemy.engine",
+        "aiosqlite",
     ):
         lg = logging.getLogger(name)
         lg.handlers.clear()
         lg.propagate = True
-        # Our synodos.request middleware already logs method/path/status/duration
-        # per request, so uvicorn.access's INFO "GET / HTTP/1.1 200" lines are
-        # redundant. Lift its level to WARNING (don't disable) so genuine
-        # warnings/errors still surface.
-        if name == "uvicorn.access":
+        # Lift these to WARNING (don't disable) so genuine warnings/errors still
+        # surface, while their noisy/sensitive DEBUG/INFO output never reaches the
+        # handlers even when root is DEBUG:
+        #   - uvicorn.access: redundant with our synodos.request line.
+        #   - aiosqlite / sqlalchemy.engine: echo raw SQL with bound parameters,
+        #     which would leak question/answer/buffer text (no-content rule).
+        if name in ("uvicorn.access", "aiosqlite", "sqlalchemy.engine"):
             lg.setLevel(logging.WARNING)
