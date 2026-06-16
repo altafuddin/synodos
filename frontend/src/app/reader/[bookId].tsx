@@ -16,6 +16,9 @@ import { useBookStore } from '../../stores/bookStore';
 import ReaderEpub from '../../components/ReaderEpub';
 import type { BookDetail, Locator } from '../../types';
 import type { ThemeName } from '../../constants/themes';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('reader');
 
 const THEME_CYCLE: Record<ThemeName, ThemeName> = {
   dark: 'sepia',
@@ -75,7 +78,7 @@ export default function ReaderScreen() {
 
   useEffect(() => {
     const f = new File(localFileUrl);
-    console.log('[Synodos] EPUB file exists on disk:', f.exists, 'uri:', localFileUrl);
+    log.debug('epub_file_check', { exists: f.exists, uri: localFileUrl });
   }, [localFileUrl]);
 
   const cycleTheme = () => {

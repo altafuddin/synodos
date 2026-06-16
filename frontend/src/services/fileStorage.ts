@@ -1,4 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('fileStorage');
 
 const BOOKS_SUBDIR = 'books';
 
@@ -35,6 +38,6 @@ export async function deleteBookFile(
       file.delete();
     }
   } catch (err) {
-    console.warn(`Failed to delete local book file ${bookId}.${format}:`, err);
+    log.warn('local_file_delete_failed', { bookId, format, error: String(err) });
   }
 }

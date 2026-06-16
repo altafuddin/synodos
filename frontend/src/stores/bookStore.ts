@@ -3,6 +3,9 @@ import type { Book } from '../types';
 import type { ThemeName } from '../constants/themes';
 import { deleteBook, listBooks } from '../services/books';
 import { deleteBookFile } from '../services/fileStorage';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('bookStore');
 
 interface BookStore {
   books: Book[];
@@ -58,9 +61,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
     if (format) {
       void deleteBookFile(bookId, format);
     } else {
-      console.warn(
-        `removeBook: book ${bookId} not in store; skipping local file cleanup (format unknown).`
-      );
+      log.warn('remove_book_unknown_format', { bookId });
     }
   },
 

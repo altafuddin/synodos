@@ -2,6 +2,9 @@ import { useCallback, useRef } from 'react';
 import type { PublicationReadyEvent } from 'react-native-readium';
 import type { Locator } from '../types';
 import { reportProgress } from '../services/progress';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('useReader');
 
 export function useReader(bookId: string): {
   handleLocationChange: (locator: Locator) => void;
@@ -24,8 +27,9 @@ export function useReader(bookId: string): {
 
       lastReportedRef.current[unit_id] = scroll_pct;
 
+      log.debug('progress_reported', { unit_id, scroll_pct });
       reportProgress(bookId, unit_id, scroll_pct).catch((err) =>
-        console.warn('Progress report failed:', err)
+        log.warn('progress_report_failed', { error: String(err) })
       );
     },
     [bookId]
@@ -33,13 +37,11 @@ export function useReader(bookId: string): {
 
   const handlePublicationReady = useCallback(
     (event: PublicationReadyEvent) => {
-      console.log(
-        '[Synodos] Publication ready:',
-        event.metadata.title,
-        '— positions:',
-        event.positions.length
-      );
-      console.log('[Synodos] TOC entries:', event.tableOfContents?.length ?? 'none');
+      log.info('publication_ready', {
+        title: event.metadata.title,
+        positions: event.positions.length,
+      });
+      log.debug('toc_loaded', { entries: event.tableOfContents?.length ?? 0 });
     },
     []
   );

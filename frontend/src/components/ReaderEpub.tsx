@@ -8,6 +8,9 @@ import {
 import type { Locator } from '../types';
 import { useReader } from '../hooks/useReader';
 import { useBookStore } from '../stores/bookStore';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ReaderEpub');
 
 type ReaderEpubProps = {
   bookId: string;
@@ -33,7 +36,7 @@ const ReaderEpub = forwardRef<ReadiumViewRef, ReaderEpubProps>(
 
     const preferences: Preferences = { theme };
 
-    console.log('[Synodos] ReaderEpub mounting with fileUrl:', fileUrl);
+    log.debug('mounting', { fileUrl });
 
     return (
       <View style={styles.container}>
