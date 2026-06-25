@@ -14,6 +14,7 @@ import { getBook } from '../../services/books';
 import { getBookFileUri } from '../../services/fileStorage';
 import { useBookStore } from '../../stores/bookStore';
 import ReaderEpub from '../../components/ReaderEpub';
+import ReaderPdf from '../../components/ReaderPdf';
 import type { BookDetail, Locator } from '../../types';
 import type { ThemeName } from '../../constants/themes';
 import { createLogger } from '../../utils/logger';
@@ -63,6 +64,7 @@ export default function ReaderScreen() {
   }, [bookId, setActiveBook]);
 
   const initialLocator = useMemo<Locator | undefined>(() => {
+    if (bookDetail?.format !== 'epub') return undefined; // EPUB-only locator
     const href = bookDetail?.current_position;
     if (!href) return undefined; // fresh book → no resume
 
@@ -74,12 +76,23 @@ export default function ReaderScreen() {
     };
   }, [bookDetail]);
 
-  const localFileUrl = useMemo(() => getBookFileUri(bookId, 'epub'), [bookId]);
+  const format = bookDetail?.format ?? null;
+
+  // EPUB-only file URI — scoped to the epub branch, never built for PDF.
+  const epubFileUrl = useMemo(() => getBookFileUri(bookId, 'epub'), [bookId]);
+  // PDF-only file URI — scoped to the pdf branch.
+  const pdfFileUrl = useMemo(() => getBookFileUri(bookId, 'pdf'), [bookId]);
 
   useEffect(() => {
-    const f = new File(localFileUrl);
-    log.debug('epub_file_check', { exists: f.exists, uri: localFileUrl });
-  }, [localFileUrl]);
+    if (format === null) return;
+    log.info('reader_format_branch', { format });
+  }, [format]);
+
+  useEffect(() => {
+    if (format !== 'epub') return;
+    const f = new File(epubFileUrl);
+    log.debug('epub_file_check', { exists: f.exists, uri: epubFileUrl });
+  }, [format, epubFileUrl]);
 
   const cycleTheme = () => {
     setTheme(THEME_CYCLE[storeTheme]);
@@ -130,13 +143,17 @@ export default function ReaderScreen() {
           </View>
         )}
 
-        {bookDetail !== null && (
+        {bookDetail !== null && bookDetail.format === 'epub' && (
           <ReaderEpub
             ref={readerRef}
             bookId={bookId}
-            fileUrl={localFileUrl}
+            fileUrl={epubFileUrl}
             initialLocator={initialLocator}
           />
+        )}
+
+        {bookDetail !== null && bookDetail.format === 'pdf' && (
+          <ReaderPdf bookId={bookId} fileUrl={pdfFileUrl} />
         )}
       </View>
 
