@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
+import Pdf from 'react-native-pdf';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('ReaderPdf');
@@ -12,32 +13,30 @@ type ReaderPdfProps = {
 
 export default function ReaderPdf({ bookId, fileUrl }: ReaderPdfProps) {
   const theme = useTheme();
-
-  useEffect(() => {
-    log.info('mounted', { bookId, fileUrl });
-  }, [bookId, fileUrl]);
+  // Current page (1-based, from react-native-pdf). Not reported yet — 5c.
+  const [, setCurrentPage] = useState(1);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text variant="titleMedium" style={{ color: theme.colors.onBackground }}>
-        PDF reader — Layer 5b
-      </Text>
-      <Text
-        variant="bodySmall"
-        style={[styles.path, { color: theme.colors.onSurfaceVariant }]}
-      >
-        {fileUrl}
-      </Text>
+      <Pdf
+        source={{ uri: fileUrl }}
+        style={[styles.pdf, { backgroundColor: theme.colors.background }]}
+        onLoadComplete={(numberOfPages) => {
+          log.info('pdf_loaded', { numberOfPages });
+        }}
+        onPageChanged={(page, numberOfPages) => {
+          setCurrentPage(page);
+          log.debug('pdf_page_changed', { page, numberOfPages });
+        }}
+        onError={(error) => {
+          log.warn('pdf_error', { error: String(error) });
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  path: { marginTop: 8, textAlign: 'center' },
+  container: { flex: 1 },
+  pdf: { flex: 1, width: '100%' },
 });
