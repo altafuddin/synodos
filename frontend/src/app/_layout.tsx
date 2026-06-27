@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import { themes } from '../constants/themes';
 import { useBookStore } from '../stores/bookStore';
@@ -27,7 +28,9 @@ function AppShell() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AppShell />
+      <BottomSheetModalProvider>
+        <AppShell />
+      </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }

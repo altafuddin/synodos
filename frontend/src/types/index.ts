@@ -15,7 +15,7 @@ export interface BookDetail extends Book {
 }
 
 export interface ChatMessage {
-  id: string;
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
