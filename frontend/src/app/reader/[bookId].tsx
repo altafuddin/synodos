@@ -76,6 +76,14 @@ export default function ReaderScreen() {
     };
   }, [bookDetail]);
 
+  // PDF-only resume page, parsed from the `page_N` resume cursor. Page-granular
+  // (within-page progression is not restorable). Defaults to page 1.
+  const initialPage = useMemo<number>(() => {
+    if (bookDetail?.format !== 'pdf') return 1;
+    const match = /^page_(\d+)$/.exec(bookDetail.current_position ?? '');
+    return match ? parseInt(match[1], 10) : 1;
+  }, [bookDetail]);
+
   const format = bookDetail?.format ?? null;
 
   // EPUB-only file URI — scoped to the epub branch, never built for PDF.
@@ -153,7 +161,7 @@ export default function ReaderScreen() {
         )}
 
         {bookDetail !== null && bookDetail.format === 'pdf' && (
-          <ReaderPdf bookId={bookId} fileUrl={pdfFileUrl} />
+          <ReaderPdf bookId={bookId} fileUrl={pdfFileUrl} initialPage={initialPage} />
         )}
       </View>
 
