@@ -91,6 +91,7 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
         footerComponent={renderFooter}
