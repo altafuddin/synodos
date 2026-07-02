@@ -10,11 +10,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { File } from 'expo-file-system';
 import type { ReadiumViewRef } from 'react-native-readium';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { getBook } from '../../services/books';
 import { getBookFileUri } from '../../services/fileStorage';
 import { useBookStore } from '../../stores/bookStore';
 import ReaderEpub from '../../components/ReaderEpub';
 import ReaderPdf from '../../components/ReaderPdf';
+import ChatSheet from '../../components/ChatSheet';
 import type { BookDetail, Locator } from '../../types';
 import type { ThemeName } from '../../constants/themes';
 import { createLogger } from '../../utils/logger';
@@ -40,6 +42,7 @@ export default function ReaderScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const readerRef = useRef<ReadiumViewRef>(null);
+  const chatRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +177,12 @@ export default function ReaderScreen() {
             iconColor={theme.colors.onSurface}
           />
           <IconButton
+            icon="message-text-outline"
+            size={28}
+            onPress={() => chatRef.current?.present()}
+            iconColor={theme.colors.primary}
+          />
+          <IconButton
             icon="chevron-right"
             size={32}
             onPress={() => readerRef.current?.goForward()}
@@ -181,6 +190,8 @@ export default function ReaderScreen() {
           />
         </View>
       </SafeAreaView>
+
+      <ChatSheet ref={chatRef} bookId={bookId} />
     </View>
   );
 }

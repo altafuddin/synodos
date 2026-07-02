@@ -12,15 +12,14 @@ const nextId = () => `local-${Date.now()}-${idCounter++}`;
 
 export interface UseChat {
   messages: ChatMessage[];
-  input: string;
   isStreaming: boolean;
-  setInput: (value: string) => void;
-  send: () => void;
+  // Takes the question text directly — ChatInput owns its draft state so the
+  // pinned BottomSheetFooter subtree isn't recreated on every keystroke.
+  send: (question: string) => void;
 }
 
 export function useChat(bookId: string): UseChat {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
 
   // Close handle for the in-flight stream (set while streaming, cleared on settle).
@@ -51,8 +50,8 @@ export function useChat(bookId: string): UseChat {
     };
   }, [bookId]);
 
-  const send = useCallback(() => {
-    const question = input.trim();
+  const send = useCallback((raw: string) => {
+    const question = raw.trim();
     if (!question || isStreaming) return;
 
     const assistantId = nextId();
@@ -72,7 +71,6 @@ export function useChat(bookId: string): UseChat {
 
     // Optimistic: user turn + empty assistant turn the tokens stream into.
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setInput('');
     setIsStreaming(true);
     tokenCountRef.current = 0;
     log.info('stream_open', { question_chars: question.length });
@@ -102,7 +100,7 @@ export function useChat(bookId: string): UseChat {
         setIsStreaming(false);
       },
     });
-  }, [bookId, input, isStreaming]);
+  }, [bookId, isStreaming]);
 
-  return { messages, input, isStreaming, setInput, send };
+  return { messages, isStreaming, send };
 }
