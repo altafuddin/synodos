@@ -16,6 +16,8 @@ import {
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useChat } from '../hooks/useChat';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
@@ -54,6 +56,19 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
     // clipping.
     const [footerHeight, setFooterHeight] = useState(96);
 
+    // Manual footer lift (BUG-008). Under Android 16 edge-to-edge + targetSdk 35
+    // the window no longer resizes for the IME, so gorhom's internal
+    // useAnimatedKeyboard computes ~0 lift and the pinned footer never rises.
+    // Drive the translation ourselves from keyboard-controller's per-frame
+    // height SharedValue. Its convention: height.value is 0 when closed and
+    // NEGATIVE as the keyboard opens (magnitude = keyboard height), so applying
+    // translateY: height.value directly moves the footer UP with the keyboard —
+    // no sign flip needed.
+    const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+    const footerAnimatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateY: keyboardHeight.value }],
+    }));
+
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
         <BottomSheetBackdrop
@@ -83,14 +98,15 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
     const renderFooter = useCallback(
       (props: BottomSheetFooterProps) => (
         <BottomSheetFooter {...props}>
-          <View
+          <Animated.View
+            style={footerAnimatedStyle}
             onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           >
             <ChatInput onSend={send} disabled={isStreaming} />
-          </View>
+          </Animated.View>
         </BottomSheetFooter>
       ),
-      [send, isStreaming]
+      [send, isStreaming, footerAnimatedStyle]
     );
 
     return (
