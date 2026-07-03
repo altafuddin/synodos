@@ -90,8 +90,14 @@ export function useChat(bookId: string): UseChat {
         cleanupRef.current = null;
         setIsStreaming(false);
       },
-      onError: (message) => {
-        log.error('stream_error', { message });
+      onError: (reason) => {
+        log.error('stream_error', { reason });
+        const message =
+          reason === 'rate_limit'
+            ? 'Rate limit reached — please try again later.'
+            : reason === 'connection_lost'
+              ? 'Connection to the assistant was lost.'
+              : 'The assistant failed to respond.';
         cleanupRef.current = null;
         patchAssistant((m) => ({
           ...m,

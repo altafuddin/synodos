@@ -17,7 +17,10 @@ export async function getChatHistory(bookId: string): Promise<ChatMessage[]> {
 export interface StreamHandlers {
   onToken: (text: string) => void;
   onDone: () => void;
-  onError: (message: string) => void;
+  // Receives the raw reason token (rate_limit, api_error, unknown,
+  // connection_lost) — not a display message. Mapping to user-facing copy
+  // happens in the consumer.
+  onError: (reason: string) => void;
 }
 
 /**
@@ -27,7 +30,8 @@ export interface StreamHandlers {
  * The backend frames each chunk as `data: {raw text}\n\n`. react-native-sse parses
  * the SSE wire format itself, so `event.data` is already the post-`data: ` payload
  * (multi-line chunks rejoined with \n). Tokens are raw text, never JSON — passed
- * through verbatim. Sentinels: "[DONE]" → onDone, "[ERROR]" → onError.
+ * through verbatim. Sentinels: "[DONE]" → onDone, "[ERROR:<reason>]" → onError
+ * (bare "[ERROR]" accepted as a fallback).
  *
  * Returns a cleanup function that closes the stream (for unmount/abort).
  */
@@ -64,26 +68,23 @@ export function streamAnswer(
       return;
     }
 
-    if (data === '[ERROR]') {
+    const errorMatch = /^\[ERROR(?::(.*))?\]$/.exec(data);
+    if (errorMatch) {
       if (settled) return;
       settled = true;
       cleanup();
-      handlers.onError('The assistant failed to respond.');
+      handlers.onError(errorMatch[1] || 'unknown');
       return;
     }
 
     handlers.onToken(data);
   });
 
-  es.addEventListener('error', (event) => {
+  es.addEventListener('error', () => {
     if (settled) return;
     settled = true;
     cleanup();
-    const message =
-      'message' in event && event.message
-        ? event.message
-        : 'Connection to the assistant was lost.';
-    handlers.onError(message);
+    handlers.onError('connection_lost');
   });
 
   return cleanup;
