@@ -194,3 +194,60 @@ class TestChatHistory:
         data = resp.json()
         assert data["book_id"] == book_id
         assert data["messages"] == []
+
+
+class TestChatStreamErrors:
+    async def _upload(self, client, epub_bytes):
+        upload = await client.post(
+            "/api/books",
+            files={"file": ("test.epub", epub_bytes, "application/epub+zip")},
+        )
+        return upload.json()["book_id"]
+
+    async def test_rate_limit_emits_error_frame(
+        self, client, epub_bytes, monkeypatch
+    ):
+        from google.genai.errors import ClientError
+        import app.routers.chat as chat_mod
+
+        book_id = await self._upload(client, epub_bytes)
+
+        monkeypatch.setattr(chat_mod, "GEMINI_API_KEY", "test-key")
+
+        async def boom(*args, **kwargs):
+            raise ClientError(
+                429,
+                {"error": {"status": "RESOURCE_EXHAUSTED", "message": "quota"}},
+            )
+            yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr(chat_mod, "stream_answer", boom)
+
+        resp = await client.post(
+            f"/api/books/{book_id}/chat", json={"question": "hi"}
+        )
+        assert resp.status_code == 200
+        assert "data: [ERROR:rate_limit]" in resp.text
+        assert "[DONE]" not in resp.text
+
+    async def test_generic_exception_emits_unknown_frame(
+        self, client, epub_bytes, monkeypatch
+    ):
+        import app.routers.chat as chat_mod
+
+        book_id = await self._upload(client, epub_bytes)
+
+        monkeypatch.setattr(chat_mod, "GEMINI_API_KEY", "test-key")
+
+        async def boom(*args, **kwargs):
+            raise RuntimeError("unexpected")
+            yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr(chat_mod, "stream_answer", boom)
+
+        resp = await client.post(
+            f"/api/books/{book_id}/chat", json={"question": "hi"}
+        )
+        assert resp.status_code == 200
+        assert "data: [ERROR:unknown]" in resp.text
+        assert "[DONE]" not in resp.text

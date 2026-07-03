@@ -7,6 +7,7 @@ import structlog
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from google.genai.errors import APIError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,9 +89,20 @@ async def ask_question(
             ):
                 full_response.append(chunk)
                 yield f"data: {chunk}\n\n"
+        except APIError as err:
+            log.error(
+                "chat_stream_failed",
+                book_id=book_id,
+                code=err.code,
+                status=err.status,
+                exc_info=True,
+            )
+            reason = "rate_limit" if err.code == 429 else "api_error"
+            yield f"data: [ERROR:{reason}]\n\n"
+            return
         except Exception:
             log.error("chat_stream_failed", book_id=book_id, exc_info=True)
-            yield "data: [ERROR]\n\n"
+            yield "data: [ERROR:unknown]\n\n"
             return
 
         answer = "".join(full_response)
