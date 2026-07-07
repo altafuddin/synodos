@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { Alert, View, FlatList, StyleSheet } from 'react-native';
 import { ActivityIndicator, Text, FAB, Banner, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
@@ -17,11 +17,21 @@ export default function LibraryScreen() {
     fetchBooks();
   }, [fetchBooks]);
 
+  const openBook = (book: Book) => {
+    // Explicit false = reconciliation confirmed the local copy is gone.
+    // Block navigation — a dead file URI renders a blank reader.
+    if (book.hasLocalFile === false) {
+      Alert.alert(
+        'File missing',
+        "This book's file is no longer on this device, so it can't be opened. Delete the book and upload it again to keep reading."
+      );
+      return;
+    }
+    router.push(`/reader/${book.book_id}`);
+  };
+
   const renderItem = ({ item }: { item: Book }) => (
-    <LibraryCard
-      book={item}
-      onPress={() => router.push(`/reader/${item.book_id}`)}
-    />
+    <LibraryCard book={item} onPress={() => openBook(item)} />
   );
 
   return (
