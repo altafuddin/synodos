@@ -134,7 +134,9 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
             // scrollToEnd here (not on mount) waits for measured content, so it
             // survives streaming growth and history load without a timing race.
             onContentSizeChange={(_w: number, h: number) => {
-              log.info('content_size_changed', {
+              // debug (not info): fires per token during streaming — info
+              // would flood the file sink.
+              log.debug('content_size_changed', {
                 height: Math.round(h),
                 messageCount: data.length,
               });
