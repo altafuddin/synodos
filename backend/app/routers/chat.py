@@ -26,6 +26,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 router = APIRouter(prefix="/api/books", tags=["chat"])
 log = structlog.get_logger("synodos.chat")
 
+# Most recent messages sent to Gemini as context — 10 user/assistant pairs.
+# The history GET endpoint stays unbounded.
+GEMINI_HISTORY_LIMIT = 20
+
 
 @router.post("/{book_id}/chat")
 async def ask_question(
@@ -56,12 +60,17 @@ async def ask_question(
         log.warning("chat_buffer_missing", book_id=book_id)
         buffer_text = ""
 
+    # Gemini context is capped to the most recent GEMINI_HISTORY_LIMIT
+    # messages (10 user/assistant pairs). Fetched newest-first with a LIMIT,
+    # then reversed back to chronological order. The id tiebreak makes
+    # same-timestamp user/assistant rows order deterministically.
     history_result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.book_id == book_id)
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(GEMINI_HISTORY_LIMIT)
     )
-    history_rows = history_result.scalars().all()
+    history_rows = list(reversed(history_result.scalars().all()))
 
     gemini_history = [
         {
@@ -160,7 +169,8 @@ async def get_chat_history(
     history_result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.book_id == book_id)
-        .order_by(ChatMessage.created_at.asc())
+        # id tiebreak: user/assistant rows can share a timestamp.
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
     messages = history_result.scalars().all()
 
