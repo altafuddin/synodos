@@ -74,6 +74,23 @@ async def ask_question(
         "chat_history_loaded", book_id=book_id, message_count=len(gemini_history)
     )
 
+    # Persist the user turn up front, committed before streaming begins, so a
+    # Gemini failure or client disconnect mid-stream loses only the assistant
+    # turn. The history context above was loaded BEFORE this write, and the
+    # question is appended separately by the Gemini service — so the new row
+    # is never duplicated into this request's context. Uses the request
+    # session (only reads precede it, so this commit is its own transaction).
+    db.add(
+        ChatMessage(
+            book_id=str(book_id),
+            role="user",
+            content=request.question,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db.commit()
+    log.debug("chat_user_turn_persisted", book_id=book_id)
+
     async def generate():
         start = time.perf_counter()
         log.info(
@@ -106,22 +123,15 @@ async def ask_question(
             return
 
         answer = "".join(full_response)
+        # Assistant turn only — the user turn was committed before streaming
+        # began. Its own (later) timestamp keeps user → assistant ordering.
         async with get_db_context() as session:
-            now = datetime.now(timezone.utc)
-            session.add(
-                ChatMessage(
-                    book_id=str(book_id),
-                    role="user",
-                    content=request.question,
-                    created_at=now,
-                )
-            )
             session.add(
                 ChatMessage(
                     book_id=str(book_id),
                     role="assistant",
                     content=answer,
-                    created_at=now,
+                    created_at=datetime.now(timezone.utc),
                 )
             )
             await session.commit()

@@ -251,3 +251,32 @@ class TestChatStreamErrors:
         assert resp.status_code == 200
         assert "data: [ERROR:unknown]" in resp.text
         assert "[DONE]" not in resp.text
+
+    async def test_user_turn_persisted_on_gemini_failure(
+        self, client, epub_bytes, monkeypatch
+    ):
+        import app.routers.chat as chat_mod
+
+        book_id = await self._upload(client, epub_bytes)
+
+        monkeypatch.setattr(chat_mod, "GEMINI_API_KEY", "test-key")
+
+        async def boom(*args, **kwargs):
+            raise RuntimeError("unexpected")
+            yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr(chat_mod, "stream_answer", boom)
+
+        resp = await client.post(
+            f"/api/books/{book_id}/chat", json={"question": "does she survive?"}
+        )
+        assert resp.status_code == 200
+        assert "data: [ERROR:unknown]" in resp.text
+
+        # The user turn must survive the failure; the assistant turn is lost.
+        history = await client.get(f"/api/books/{book_id}/chat")
+        messages = history.json()["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "does she survive?"
+
