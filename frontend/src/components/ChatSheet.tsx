@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -16,7 +17,10 @@ import {
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
-import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import {
+  KeyboardEvents,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useChat } from '../hooks/useChat';
 import ChatMessage from './ChatMessage';
@@ -64,10 +68,37 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
     // NEGATIVE as the keyboard opens (magnitude = keyboard height), so applying
     // translateY: height.value directly moves the footer UP with the keyboard —
     // no sign flip needed.
+    // NOTE: this manual transform assumes gorhom's internal keyboard lift stays
+    // ~0. If a future gorhom/keyboard-controller upgrade restores the internal
+    // lift, footer and spacer will BOTH move — double-lift. Re-test on upgrade.
     const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
     const footerAnimatedStyle = useAnimatedStyle(() => ({
       transform: [{ translateY: keyboardHeight.value }],
     }));
+
+    // List clearance spacer, rendered as ListFooterComponent. Base clearance is
+    // the measured footer height (+8 breathing room); while the keyboard is up
+    // it grows by the keyboard's magnitude (height.value is negative → minus),
+    // so the newest messages rise with the lifted footer. Driven entirely on
+    // the UI thread — no React state per keyboard frame.
+    const spacerAnimatedStyle = useAnimatedStyle(() => ({
+      height: footerHeight + 8 - keyboardHeight.value,
+    }));
+
+    const renderListSpacer = useCallback(
+      () => <Animated.View style={spacerAnimatedStyle} />,
+      [spacerAnimatedStyle]
+    );
+
+    // One-shot: when the keyboard finishes opening, land back on the newest
+    // message (the spacer growth may have pushed it out of view). Scroll
+    // trigger only — layout stays with the animated spacer above.
+    useEffect(() => {
+      const sub = KeyboardEvents.addListener('keyboardDidShow', () => {
+        listRef.current?.scrollToEnd({ animated: false });
+      });
+      return () => sub.remove();
+    }, []);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
@@ -147,13 +178,11 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
                 height: Math.round(e.nativeEvent.layout.height),
               })
             }
-            // Natural order → newest message is at the content bottom, so the
-            // footer-clearance padding goes on paddingBottom to keep it clear of
-            // the pinned footer.
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: footerHeight + 8 },
-            ]}
+            // Natural order → newest message is at the content bottom. Footer
+            // clearance is the animated spacer below (ListFooterComponent),
+            // which also absorbs the keyboard height while it's open.
+            contentContainerStyle={styles.listContent}
+            ListFooterComponent={renderListSpacer}
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={{ color: theme.colors.onSurface, opacity: 0.6 }}>
@@ -173,9 +202,8 @@ ChatSheet.displayName = 'ChatSheet';
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { flex: 1 },
-  // paddingBottom is applied dynamically from the measured footer height (see
-  // contentContainerStyle) to keep the newest message clear of the pinned
-  // footer. The 8 here is the breathing room at the visual top (oldest message).
+  // Bottom clearance lives in the animated ListFooterComponent spacer (footer
+  // height + keyboard). The 8 here is breathing room at the visual top.
   listContent: { paddingTop: 8, flexGrow: 1 },
   empty: {
     flex: 1,
