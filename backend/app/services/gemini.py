@@ -10,6 +10,10 @@ log = structlog.get_logger("synodos.gemini")
 
 SYSTEM_PROMPT = """You are a reading assistant for a book reader app. You only know what the user has read so far — the text provided below. Do not reference or speculate about anything beyond it. Answer questions helpfully and concisely based only on the reading buffer below.
 
+Be conversational and friendly — you're a companion the reader is chatting with about the book, not a formal Q&A system.
+
+If a question cannot be answered from the reading buffer, say so explicitly and note that the answer most likely lies in a part of the book the reader hasn't reached yet — without hinting at what that part might contain.
+
 Reading buffer:
 {buffer_text}"""
 
@@ -34,7 +38,10 @@ def _open_stream(question, buffer_text, chat_history, api_key):
         contents=contents,
         config={
             "system_instruction": SYSTEM_PROMPT.format(buffer_text=buffer_text),
-            "max_output_tokens": 1024,
+            # Thinking disabled: with it on, thinking tokens count against
+            # max_output_tokens and can truncate the visible answer.
+            "thinking_config": {"thinking_budget": 0},
+            "max_output_tokens": 2048,
         },
     )
 
