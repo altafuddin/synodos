@@ -6,6 +6,10 @@ export interface Book {
   total_units: number;
   uploaded_at: string;
   last_read_at: string | null;
+  // Client-side only — set by the store's local-file reconciliation, never
+  // returned by the server. undefined = not yet checked; false = the local
+  // copy is gone and the book can't be opened on this device.
+  hasLocalFile?: boolean;
 }
 
 export interface BookDetail extends Book {

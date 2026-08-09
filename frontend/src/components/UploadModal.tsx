@@ -46,8 +46,10 @@ function mapErrorMessage(err: unknown): string {
 }
 
 function showLocalCopyWarning() {
+  // Honest copy: the server keeps only extracted text, so a failed local
+  // copy is unrecoverable — there is nothing to redownload.
   const message =
-    'Book uploaded but local copy failed — offline reading will redownload.';
+    "Book uploaded, but saving it on this device failed — it can't be read here. Delete it and upload it again.";
   if (Platform.OS === 'android') {
     ToastAndroid.show(message, ToastAndroid.LONG);
   } else {
@@ -103,10 +105,10 @@ export default function UploadModal({ visible, onDismiss }: UploadModalProps) {
       const book = await uploadBook(asset.uri, asset.name, mimeFor(format));
       try {
         await saveBookFile(asset.uri, book.book_id, book.format);
-        addBook(book);
+        addBook({ ...book, hasLocalFile: true });
         closeModal();
       } catch {
-        addBook(book);
+        addBook({ ...book, hasLocalFile: false });
         showLocalCopyWarning();
         closeModal();
       }

@@ -10,30 +10,40 @@ log = structlog.get_logger("synodos.gemini")
 
 SYSTEM_PROMPT = """You are a reading assistant for a book reader app. You only know what the user has read so far — the text provided below. Do not reference or speculate about anything beyond it. Answer questions helpfully and concisely based only on the reading buffer below.
 
+Be conversational and friendly — you're a companion the reader is chatting with about the book, not a formal Q&A system.
+
+If a question cannot be answered from the reading buffer, say so explicitly and note that the answer most likely lies in a part of the book the reader hasn't reached yet — without hinting at what that part might contain.
+
 Reading buffer:
 {buffer_text}"""
 
 
-def _generate_sync(question, buffer_text, chat_history, api_key):
+# Sentinel returned by next() when the sync Gemini iterator is exhausted —
+# lets the async side detect end-of-stream without catching StopIteration
+# across the to_thread boundary.
+_STREAM_END = object()
+
+
+def _open_stream(question, buffer_text, chat_history, api_key):
     client = genai.Client(api_key=api_key)
 
     contents = list(chat_history)
     contents.append({"role": "user", "parts": [{"text": question}]})
 
-    response = client.models.generate_content_stream(
+    # The stream is lazy — the HTTP request fires on first next(). The client
+    # must be returned alongside it: if it goes out of scope its finalizer
+    # closes the underlying httpx client before iteration starts.
+    return client, client.models.generate_content_stream(
         model="gemini-2.5-flash",
         contents=contents,
         config={
             "system_instruction": SYSTEM_PROMPT.format(buffer_text=buffer_text),
-            "max_output_tokens": 1024,
+            # Thinking disabled: with it on, thinking tokens count against
+            # max_output_tokens and can truncate the visible answer.
+            "thinking_config": {"thinking_budget": 0},
+            "max_output_tokens": 2048,
         },
     )
-
-    chunks = []
-    for chunk in response:
-        if chunk.text:
-            chunks.append(chunk.text)
-    return chunks
 
 
 async def stream_answer(
@@ -52,16 +62,28 @@ async def stream_answer(
     )
 
     start = time.perf_counter()
-    chunks = await asyncio.to_thread(
-        _generate_sync, question, buffer_text, chat_history, api_key
+    client, stream = await asyncio.to_thread(
+        _open_stream, question, buffer_text, chat_history, api_key
     )
+    iterator = iter(stream)
+
+    chunk_count = 0
+    answer_chars = 0
+    while True:
+        # One blocking next() per chunk — each token batch crosses the thread
+        # boundary as Gemini produces it instead of after the full response.
+        chunk = await asyncio.to_thread(next, iterator, _STREAM_END)
+        if chunk is _STREAM_END:
+            break
+        if chunk.text:
+            chunk_count += 1
+            answer_chars += len(chunk.text)
+            yield chunk.text
+
     log.info(
         "gemini_response",
         book_id=book_id,
-        chunk_count=len(chunks),
-        answer_chars=sum(len(c) for c in chunks),
+        chunk_count=chunk_count,
+        answer_chars=answer_chars,
         duration_ms=round((time.perf_counter() - start) * 1000, 2),
     )
-
-    for chunk in chunks:
-        yield chunk

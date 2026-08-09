@@ -12,9 +12,19 @@ export default function LibraryCard({ book, onPress }: LibraryCardProps) {
 
   const isEpub = book.format === 'epub';
   const badgeColor = isEpub ? '#1a73e8' : '#e6930a';
+  // Only an explicit false means "checked and missing" — undefined (not yet
+  // reconciled) renders as normal.
+  const fileMissing = book.hasLocalFile === false;
 
   return (
-    <Card style={[styles.card, { backgroundColor: theme.colors.surface }]} onPress={onPress}>
+    <Card
+      style={[
+        styles.card,
+        { backgroundColor: theme.colors.surface },
+        fileMissing && styles.cardMissing,
+      ]}
+      onPress={onPress}
+    >
       <Card.Content style={styles.content}>
         <Text variant="titleMedium" style={{ color: theme.colors.onSurface }} numberOfLines={2}>
           {book.title}
@@ -33,6 +43,14 @@ export default function LibraryCard({ book, onPress }: LibraryCardProps) {
         >
           {book.format.toUpperCase()}
         </Chip>
+        {fileMissing && (
+          <Text
+            variant="bodySmall"
+            style={[styles.missingLabel, { color: theme.colors.error }]}
+          >
+            File missing — unreadable on this device
+          </Text>
+        )}
       </Card.Content>
     </Card>
   );
@@ -43,6 +61,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 6,
     borderRadius: 12,
+  },
+  cardMissing: {
+    opacity: 0.6,
+  },
+  missingLabel: {
+    marginTop: 8,
   },
   content: {
     paddingVertical: 12,

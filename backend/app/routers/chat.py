@@ -26,6 +26,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 router = APIRouter(prefix="/api/books", tags=["chat"])
 log = structlog.get_logger("synodos.chat")
 
+# Most recent messages sent to Gemini as context — 10 user/assistant pairs.
+# The history GET endpoint stays unbounded.
+GEMINI_HISTORY_LIMIT = 20
+
 
 @router.post("/{book_id}/chat")
 async def ask_question(
@@ -56,12 +60,17 @@ async def ask_question(
         log.warning("chat_buffer_missing", book_id=book_id)
         buffer_text = ""
 
+    # Gemini context is capped to the most recent GEMINI_HISTORY_LIMIT
+    # messages (10 user/assistant pairs). Fetched newest-first with a LIMIT,
+    # then reversed back to chronological order. The id tiebreak makes
+    # same-timestamp user/assistant rows order deterministically.
     history_result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.book_id == book_id)
-        .order_by(ChatMessage.created_at.asc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(GEMINI_HISTORY_LIMIT)
     )
-    history_rows = history_result.scalars().all()
+    history_rows = list(reversed(history_result.scalars().all()))
 
     gemini_history = [
         {
@@ -73,6 +82,23 @@ async def ask_question(
     log.debug(
         "chat_history_loaded", book_id=book_id, message_count=len(gemini_history)
     )
+
+    # Persist the user turn up front, committed before streaming begins, so a
+    # Gemini failure or client disconnect mid-stream loses only the assistant
+    # turn. The history context above was loaded BEFORE this write, and the
+    # question is appended separately by the Gemini service — so the new row
+    # is never duplicated into this request's context. Uses the request
+    # session (only reads precede it, so this commit is its own transaction).
+    db.add(
+        ChatMessage(
+            book_id=str(book_id),
+            role="user",
+            content=request.question,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db.commit()
+    log.debug("chat_user_turn_persisted", book_id=book_id)
 
     async def generate():
         start = time.perf_counter()
@@ -106,22 +132,15 @@ async def ask_question(
             return
 
         answer = "".join(full_response)
+        # Assistant turn only — the user turn was committed before streaming
+        # began. Its own (later) timestamp keeps user → assistant ordering.
         async with get_db_context() as session:
-            now = datetime.now(timezone.utc)
-            session.add(
-                ChatMessage(
-                    book_id=str(book_id),
-                    role="user",
-                    content=request.question,
-                    created_at=now,
-                )
-            )
             session.add(
                 ChatMessage(
                     book_id=str(book_id),
                     role="assistant",
                     content=answer,
-                    created_at=now,
+                    created_at=datetime.now(timezone.utc),
                 )
             )
             await session.commit()
@@ -150,7 +169,8 @@ async def get_chat_history(
     history_result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.book_id == book_id)
-        .order_by(ChatMessage.created_at.asc())
+        # id tiebreak: user/assistant rows can share a timestamp.
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
     messages = history_result.scalars().all()
 

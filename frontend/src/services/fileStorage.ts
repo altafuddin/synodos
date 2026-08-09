@@ -28,6 +28,27 @@ export async function saveBookFile(
   return destination.uri;
 }
 
+// Enumerate the on-device book files ({bookId}.{epub|pdf} under books/).
+// Unrecognized filenames are ignored. Returns [] if the dir doesn't exist yet.
+export function listLocalBookFiles(): { bookId: string; format: 'epub' | 'pdf' }[] {
+  try {
+    const dir = booksDirectory();
+    if (!dir.exists) return [];
+    const entries: { bookId: string; format: 'epub' | 'pdf' }[] = [];
+    for (const item of dir.list()) {
+      if (item instanceof Directory) continue;
+      const match = /^(.+)\.(epub|pdf)$/.exec(item.name);
+      if (match) {
+        entries.push({ bookId: match[1], format: match[2] as 'epub' | 'pdf' });
+      }
+    }
+    return entries;
+  } catch (err) {
+    log.warn('local_list_failed', { error: String(err) });
+    return [];
+  }
+}
+
 export async function deleteBookFile(
   bookId: string,
   format: 'epub' | 'pdf'

@@ -15,7 +15,7 @@ import { getBook } from '../../services/books';
 import { getBookFileUri } from '../../services/fileStorage';
 import { useBookStore } from '../../stores/bookStore';
 import ReaderEpub from '../../components/ReaderEpub';
-import ReaderPdf from '../../components/ReaderPdf';
+import ReaderPdf, { type ReaderPdfRef } from '../../components/ReaderPdf';
 import ChatSheet from '../../components/ChatSheet';
 import type { BookDetail, Locator } from '../../types';
 import type { ThemeName } from '../../constants/themes';
@@ -42,6 +42,7 @@ export default function ReaderScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const readerRef = useRef<ReadiumViewRef>(null);
+  const pdfReaderRef = useRef<ReaderPdfRef>(null);
   const chatRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
@@ -109,6 +110,18 @@ export default function ReaderScreen() {
     setTheme(THEME_CYCLE[storeTheme]);
   };
 
+  // Footer chevrons drive whichever renderer is mounted — the Readium ref for
+  // EPUB, the setPage-adapter ref for PDF (react-native-pdf has no
+  // directional API of its own).
+  const goForward = () => {
+    if (format === 'pdf') pdfReaderRef.current?.goForward();
+    else readerRef.current?.goForward();
+  };
+  const goBackward = () => {
+    if (format === 'pdf') pdfReaderRef.current?.goBackward();
+    else readerRef.current?.goBackward();
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -164,7 +177,12 @@ export default function ReaderScreen() {
         )}
 
         {bookDetail !== null && bookDetail.format === 'pdf' && (
-          <ReaderPdf bookId={bookId} fileUrl={pdfFileUrl} initialPage={initialPage} />
+          <ReaderPdf
+            ref={pdfReaderRef}
+            bookId={bookId}
+            fileUrl={pdfFileUrl}
+            initialPage={initialPage}
+          />
         )}
       </View>
 
@@ -173,7 +191,7 @@ export default function ReaderScreen() {
           <IconButton
             icon="chevron-left"
             size={32}
-            onPress={() => readerRef.current?.goBackward()}
+            onPress={goBackward}
             iconColor={theme.colors.onSurface}
           />
           <IconButton
@@ -185,7 +203,7 @@ export default function ReaderScreen() {
           <IconButton
             icon="chevron-right"
             size={32}
-            onPress={() => readerRef.current?.goForward()}
+            onPress={goForward}
             iconColor={theme.colors.onSurface}
           />
         </View>

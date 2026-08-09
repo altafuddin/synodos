@@ -251,3 +251,105 @@ class TestChatStreamErrors:
         assert resp.status_code == 200
         assert "data: [ERROR:unknown]" in resp.text
         assert "[DONE]" not in resp.text
+
+    async def test_user_turn_persisted_on_gemini_failure(
+        self, client, epub_bytes, monkeypatch
+    ):
+        import app.routers.chat as chat_mod
+
+        book_id = await self._upload(client, epub_bytes)
+
+        monkeypatch.setattr(chat_mod, "GEMINI_API_KEY", "test-key")
+
+        async def boom(*args, **kwargs):
+            raise RuntimeError("unexpected")
+            yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr(chat_mod, "stream_answer", boom)
+
+        resp = await client.post(
+            f"/api/books/{book_id}/chat", json={"question": "does she survive?"}
+        )
+        assert resp.status_code == 200
+        assert "data: [ERROR:unknown]" in resp.text
+
+        # The user turn must survive the failure; the assistant turn is lost.
+        history = await client.get(f"/api/books/{book_id}/chat")
+        messages = history.json()["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "does she survive?"
+
+
+class TestChatHistoryLimits:
+    async def _upload(self, client, epub_bytes):
+        upload = await client.post(
+            "/api/books",
+            files={"file": ("test.epub", epub_bytes, "application/epub+zip")},
+        )
+        return upload.json()["book_id"]
+
+    async def test_gemini_context_capped_to_last_20(
+        self, client, db_session, epub_bytes, monkeypatch
+    ):
+        from datetime import datetime, timedelta
+        from app.database import ChatMessage
+        import app.routers.chat as chat_mod
+
+        book_id = await self._upload(client, epub_bytes)
+
+        base = datetime(2026, 1, 1, 12, 0, 0)
+        for i in range(30):
+            db_session.add(
+                ChatMessage(
+                    book_id=book_id,
+                    role="user" if i % 2 == 0 else "assistant",
+                    content=f"msg-{i}",
+                    created_at=base + timedelta(seconds=i),
+                )
+            )
+        await db_session.commit()
+
+        monkeypatch.setattr(chat_mod, "GEMINI_API_KEY", "test-key")
+
+        captured = {}
+
+        async def capture(book_id, question, buffer_text, chat_history, api_key):
+            captured["history"] = chat_history
+            raise RuntimeError("stop after capture")
+            yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr(chat_mod, "stream_answer", capture)
+
+        await client.post(f"/api/books/{book_id}/chat", json={"question": "q"})
+
+        history = captured["history"]
+        assert len(history) == 20
+        # The cap keeps the MOST RECENT 20 (msg-10 … msg-29), oldest first.
+        assert history[0]["parts"][0]["text"] == "msg-10"
+        assert history[-1]["parts"][0]["text"] == "msg-29"
+
+    async def test_same_timestamp_rows_order_user_then_assistant(
+        self, client, db_session, epub_bytes
+    ):
+        from datetime import datetime
+        from app.database import ChatMessage
+
+        book_id = await self._upload(client, epub_bytes)
+
+        # Identical created_at — exactly what the old single-column ORDER BY
+        # left unspecified. The id tiebreak must keep insertion order.
+        ts = datetime(2026, 1, 1, 12, 0, 0)
+        db_session.add(
+            ChatMessage(book_id=book_id, role="user", content="q1", created_at=ts)
+        )
+        await db_session.flush()  # assigns id before the second insert
+        db_session.add(
+            ChatMessage(book_id=book_id, role="assistant", content="a1", created_at=ts)
+        )
+        await db_session.commit()
+
+        resp = await client.get(f"/api/books/{book_id}/chat")
+        messages = resp.json()["messages"]
+        assert [m["role"] for m in messages] == ["user", "assistant"]
+        assert [m["content"] for m in messages] == ["q1", "a1"]
