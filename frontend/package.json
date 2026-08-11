@@ -7,7 +7,12 @@
     "dev": "APP_VARIANT=development expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:dev": "APP_VARIANT=development eas build --platform android --profile development",
+    "build:preview": "APP_VARIANT=preview eas build --platform android --profile preview",
+    "build:production": "APP_VARIANT=production eas build --platform android --profile production",
+    "update:preview": "APP_VARIANT=preview eas update --channel preview",
+    "update:production": "APP_VARIANT=production eas update --channel production"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.8",
@@ -20,6 +25,7 @@
     "expo-linking": "~55.0.9",
     "expo-router": "~55.0.8",
     "expo-status-bar": "~55.0.4",
+    "expo-updates": "~55.0.26",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.2",

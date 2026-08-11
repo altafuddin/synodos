@@ -47,6 +47,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.synodos.app"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cca6c855-c6a7-402f-8d22-fdb7cfd2ba99"
     }
   }
 }
