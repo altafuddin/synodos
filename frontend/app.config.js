@@ -14,12 +14,23 @@ const APP_NAME = {
   preview: 'Synodos (Preview)',
 }[VARIANT] || 'Synodos';
 
+// Development gets its own (amber) icon; preview and production keep whatever
+// app.json defines. `current` is passed in from the spread config so app.json
+// stays the single source of truth for the non-dev asset.
+const iconAsset = (current) =>
+  VARIANT === 'development' ? './assets/images/adaptive-icon-dev.png' : current;
+
 module.exports = ({ config }) => ({
   ...config,
   name: APP_NAME,
+  icon: iconAsset(config.icon),
   android: {
     ...config.android,
     package: IDENTIFIER,
+    adaptiveIcon: {
+      ...config.android?.adaptiveIcon,
+      foregroundImage: iconAsset(config.android?.adaptiveIcon?.foregroundImage),
+    },
   },
   ios: {
     ...config.ios,
