@@ -12,6 +12,7 @@ interface BookStore {
   activeBookId: string | null;
   theme: ThemeName;
   isLoading: boolean;
+  hasLoaded: boolean;
   error: string | null;
 
   fetchBooks: () => Promise<void>;
@@ -59,13 +60,14 @@ export const useBookStore = create<BookStore>((set, get) => ({
   activeBookId: null,
   theme: 'dark',
   isLoading: false,
+  hasLoaded: false,
   error: null,
 
   fetchBooks: async () => {
     set({ isLoading: true, error: null });
     try {
       const books = await listBooks();
-      set({ books: reconcileWithLocalFiles(books), isLoading: false });
+      set({ books: reconcileWithLocalFiles(books), isLoading: false, hasLoaded: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load books';
       set({ error: message, isLoading: false });

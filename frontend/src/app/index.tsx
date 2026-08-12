@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, View, FlatList, StyleSheet } from 'react-native';
 import { ActivityIndicator, Text, FAB, Banner, useTheme } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
 import LibraryCard from '../components/LibraryCard';
 import UploadModal from '../components/UploadModal';
@@ -10,7 +10,7 @@ import type { Book } from '../types';
 export default function LibraryScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { books, isLoading, error, fetchBooks, clearError } = useBookStore();
+  const { books, isLoading, hasLoaded, error, fetchBooks, clearError } = useBookStore();
   const [uploadVisible, setUploadVisible] = useState(false);
 
   useEffect(() => {
@@ -34,8 +34,16 @@ export default function LibraryScreen() {
     <LibraryCard book={item} onPress={() => openBook(item)} />
   );
 
+  // Empty is a distinct state from error: it may only render after a fetch has
+  // actually succeeded and returned zero books. On error `books` is still the
+  // initial [] (a failed fetch doesn't clear it), so we must not treat that as
+  // "empty" — the Banner is the sole error UI in that case.
+  const showEmpty = !isLoading && !error && hasLoaded && books.length === 0;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Stack.Screen options={{ title: 'Library' }} />
+
       <Banner
         visible={!!error}
         actions={[
@@ -51,7 +59,7 @@ export default function LibraryScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
-      ) : books.length === 0 ? (
+      ) : showEmpty ? (
         <View style={styles.centered}>
           <Text variant="headlineMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             No books yet
