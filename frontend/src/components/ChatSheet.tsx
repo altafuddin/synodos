@@ -14,6 +14,7 @@ import {
   BottomSheetFlatList,
   BottomSheetBackdrop,
   BottomSheetFooter,
+  useBottomSheetInternal,
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
@@ -33,6 +34,33 @@ const log = createLogger('ChatSheet');
 type ChatSheetProps = {
   bookId: string;
 };
+
+// List clearance spacer (ListFooterComponent → lives inside the sheet, where
+// useBottomSheetInternal is valid). Base = footer height (+8) and grows with the
+// keyboard. hiddenBelowFold compensates for gorhom sizing the list to the
+// highest detent and translating down at lower snaps: at 50% the list bottom is
+// off-screen by (animatedPosition − highestDetentPosition), so padding by it
+// lets scrollToEnd anchor the newest message at the visible bottom. 0 at 85%.
+function ListBottomSpacer({ footerHeight }: { footerHeight: number }) {
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const { animatedPosition, animatedSheetHeight, animatedLayoutState } =
+    useBottomSheetInternal();
+  const style = useAnimatedStyle(() => {
+    const base = footerHeight + 8 - keyboardHeight.value;
+    const { containerHeight } = animatedLayoutState.get();
+    // Guard the pre-layout frame (containerHeight is a sentinel until measured).
+    if (!containerHeight || containerHeight <= 0) {
+      return { height: base };
+    }
+    const highestDetentPosition = containerHeight - animatedSheetHeight.value;
+    const hiddenBelowFold = Math.max(
+      0,
+      animatedPosition.value - highestDetentPosition
+    );
+    return { height: base + hiddenBelowFold };
+  });
+  return <Animated.View style={style} />;
+}
 
 // Half-screen draggable chat drawer over the reader. The parent holds the ref
 // and calls .present() to open. State lives entirely in useChat.
@@ -76,18 +104,9 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
       transform: [{ translateY: keyboardHeight.value }],
     }));
 
-    // List clearance spacer, rendered as ListFooterComponent. Base clearance is
-    // the measured footer height (+8 breathing room); while the keyboard is up
-    // it grows by the keyboard's magnitude (height.value is negative → minus),
-    // so the newest messages rise with the lifted footer. Driven entirely on
-    // the UI thread — no React state per keyboard frame.
-    const spacerAnimatedStyle = useAnimatedStyle(() => ({
-      height: footerHeight + 8 - keyboardHeight.value,
-    }));
-
     const renderListSpacer = useCallback(
-      () => <Animated.View style={spacerAnimatedStyle} />,
-      [spacerAnimatedStyle]
+      () => <ListBottomSpacer footerHeight={footerHeight} />,
+      [footerHeight]
     );
 
     // One-shot: when the keyboard finishes opening, land back on the newest
@@ -145,6 +164,13 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
         ref={ref}
         snapPoints={snapPoints}
         enableDynamicSizing={false}
+        // Content-panning off → gorhom's scrollable stays UNLOCKED at every snap
+        // point (useScrollable: !enableContentPanningGesture ⇒ UNLOCKED), so the
+        // message list scrolls freely at 50% instead of the drag resizing the
+        // sheet. Resize/collapse/close move to the handle bar only
+        // (enableHandlePanningGesture stays default-true). enablePanDownToClose
+        // still works from the handle drag.
+        enableContentPanningGesture={false}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
         footerComponent={renderFooter}
@@ -173,11 +199,14 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
               });
               listRef.current?.scrollToEnd({ animated: false });
             }}
-            onLayout={(e: LayoutChangeEvent) =>
+            onLayout={(e: LayoutChangeEvent) => {
               log.info('list_layout', {
                 height: Math.round(e.nativeEvent.layout.height),
-              })
-            }
+              });
+              // Re-anchor on viewport layout settle too, not just content size.
+              // ?. guards the first-ever open (ref may not be attached yet).
+              listRef.current?.scrollToEnd({ animated: false });
+            }}
             // Natural order → newest message is at the content bottom. Footer
             // clearance is the animated spacer below (ListFooterComponent),
             // which also absorbs the keyboard height while it's open.
