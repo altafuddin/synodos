@@ -27,11 +27,13 @@ export interface StreamHandlers {
  * Stream an answer over SSE. Uses react-native-sse (pure-JS, XHR-backed) rather
  * than apiFetch — apiFetch resolves via .json() and cannot read text/event-stream.
  *
- * The backend frames each chunk as `data: {raw text}\n\n`. react-native-sse parses
- * the SSE wire format itself, so `event.data` is already the post-`data: ` payload
- * (multi-line chunks rejoined with \n). Tokens are raw text, never JSON — passed
- * through verbatim. Sentinels: "[DONE]" → onDone, "[ERROR:<reason>]" → onError
- * (bare "[ERROR]" accepted as a fallback).
+ * The backend frames each token as `data: {"token": "<text>"}\n\n` — JSON-encoded
+ * so leading/trailing whitespace and embedded newlines survive SSE line-trimming.
+ * react-native-sse parses the SSE wire format itself, so `event.data` is already
+ * the post-`data: ` payload; we JSON.parse it and read `.token`. Sentinels stay
+ * plain strings and are checked BEFORE the parse: "[DONE]" → onDone,
+ * "[ERROR:<reason>]" → onError (bare "[ERROR]" accepted as a fallback). They are
+ * never valid JSON, so there is no ambiguity with a token payload.
  *
  * Returns a cleanup function that closes the stream (for unmount/abort).
  */
@@ -77,7 +79,17 @@ export function streamAnswer(
       return;
     }
 
-    handlers.onToken(data);
+    // Token frames are JSON: { "token": "<text>" }. Parse and extract .token.
+    // Sentinels were already handled above, so anything here should be JSON;
+    // fall back to the raw payload if a malformed frame slips through.
+    let token: string;
+    try {
+      const parsed = JSON.parse(data);
+      token = typeof parsed?.token === 'string' ? parsed.token : data;
+    } catch {
+      token = data;
+    }
+    handlers.onToken(token);
   });
 
   es.addEventListener('error', () => {
