@@ -5,9 +5,11 @@ import type { Book } from '../types';
 interface LibraryCardProps {
   book: Book;
   onPress: () => void;
+  onLongPress?: () => void;
+  disabled?: boolean;
 }
 
-export default function LibraryCard({ book, onPress }: LibraryCardProps) {
+export default function LibraryCard({ book, onPress, onLongPress, disabled }: LibraryCardProps) {
   const theme = useTheme();
 
   const isEpub = book.format === 'epub';
@@ -24,6 +26,8 @@ export default function LibraryCard({ book, onPress }: LibraryCardProps) {
         fileMissing && styles.cardMissing,
       ]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      disabled={disabled}
     >
       <Card.Content style={styles.content}>
         <Text variant="titleMedium" style={{ color: theme.colors.onSurface }} numberOfLines={2}>

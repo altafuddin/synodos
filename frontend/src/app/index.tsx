@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, View, FlatList, StyleSheet } from 'react-native';
-import { ActivityIndicator, Text, FAB, Banner, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Text, FAB, Banner, Snackbar, useTheme } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
 import LibraryCard from '../components/LibraryCard';
@@ -10,8 +10,13 @@ import type { Book } from '../types';
 export default function LibraryScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { books, isLoading, hasLoaded, error, fetchBooks, clearError } = useBookStore();
+  const { books, isLoading, hasLoaded, error, fetchBooks, clearError, removeBook } =
+    useBookStore();
   const [uploadVisible, setUploadVisible] = useState(false);
+  // book_id of the delete currently in flight — blocks re-tap/re-long-press on
+  // that one card until the store splices it out (success) or we clear it (failure).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBooks();
@@ -30,8 +35,39 @@ export default function LibraryScreen() {
     router.push(`/reader/${book.book_id}`);
   };
 
+  const confirmDelete = (book: Book) => {
+    if (deletingId) return;
+    Alert.alert(
+      `Delete "${book.title}"?`,
+      'This removes the book and its chat history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'default' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingId(book.book_id);
+            try {
+              await removeBook(book.book_id);
+              // Success: store splices the book out, the card unmounts on its
+              // own. deletingId is dropped with it — no need to reset here.
+            } catch {
+              setDeletingId(null);
+              setDeleteError(`Couldn't delete "${book.title}". Please try again.`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderItem = ({ item }: { item: Book }) => (
-    <LibraryCard book={item} onPress={() => openBook(item)} />
+    <LibraryCard
+      book={item}
+      onPress={() => openBook(item)}
+      onLongPress={() => confirmDelete(item)}
+      disabled={deletingId === item.book_id}
+    />
   );
 
   // Empty is a distinct state from error: it may only render after a fetch has
@@ -92,6 +128,15 @@ export default function LibraryScreen() {
         visible={uploadVisible}
         onDismiss={() => setUploadVisible(false)}
       />
+
+      <Snackbar
+        visible={!!deleteError}
+        onDismiss={() => setDeleteError(null)}
+        duration={4000}
+        action={{ label: 'Dismiss', onPress: () => setDeleteError(null) }}
+      >
+        {deleteError ?? ''}
+      </Snackbar>
     </View>
   );
 }
