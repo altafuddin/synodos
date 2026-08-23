@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -114,7 +115,12 @@ async def ask_question(
                 book_id, request.question, buffer_text, gemini_history, GEMINI_API_KEY
             ):
                 full_response.append(chunk)
-                yield f"data: {chunk}\n\n"
+                # JSON-encode the token so leading/trailing whitespace and
+                # embedded newlines survive SSE line-trimming intact. Sentinels
+                # ([DONE]/[ERROR:...]) stay plain strings — see below — and are
+                # never valid JSON, so the client distinguishes them by an
+                # equality/prefix check before attempting JSON.parse.
+                yield f"data: {json.dumps({'token': chunk})}\n\n"
         except APIError as err:
             log.error(
                 "chat_stream_failed",
