@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, View, FlatList, StyleSheet } from 'react-native';
-import { ActivityIndicator, Text, FAB, Banner, Snackbar, useTheme } from 'react-native-paper';
+import { ActivityIndicator, IconButton, Text, FAB, Banner, Snackbar, useTheme } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
 import { useBookStore } from '../stores/bookStore';
 import LibraryCard from '../components/LibraryCard';
@@ -78,7 +78,18 @@ export default function LibraryScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ title: 'Library' }} />
+      <Stack.Screen
+        options={{
+          title: 'Library',
+          headerRight: () => (
+            <IconButton
+              icon="cog"
+              iconColor={theme.colors.primary}
+              onPress={() => router.push('/settings')}
+            />
+          ),
+        }}
+      />
 
       <Banner
         visible={!!error}
