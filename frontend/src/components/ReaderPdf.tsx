@@ -58,6 +58,7 @@ const ReaderPdf = forwardRef<ReaderPdfRef, ReaderPdfProps>(
           ref={pdfRef}
           source={{ uri: fileUrl }}
           page={initialPage}
+          fitPolicy={0}
           style={[styles.pdf, { backgroundColor: theme.colors.background }]}
           onLoadComplete={(numberOfPages) => {
             pageCountRef.current = numberOfPages;
