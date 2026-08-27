@@ -22,6 +22,7 @@ const ReaderEpub = forwardRef<ReadiumViewRef, ReaderEpubProps>(
   ({ bookId, fileUrl, initialLocator }, ref) => {
     const innerRef = useRef<ReadiumViewRef>(null);
     const theme = useBookStore((s) => s.theme);
+    const fontSize = useBookStore((s) => s.fontSize);
     const { handleLocationChange, handlePublicationReady } = useReader(bookId);
 
     useImperativeHandle(
@@ -34,7 +35,7 @@ const ReaderEpub = forwardRef<ReadiumViewRef, ReaderEpubProps>(
       []
     );
 
-    const preferences: Preferences = { theme };
+    const preferences: Preferences = { theme, fontSize };
 
     log.debug('mounting', { fileUrl });
 

@@ -11,6 +11,7 @@ interface BookStore {
   books: Book[];
   activeBookId: string | null;
   theme: ThemeName;
+  fontSize: number;
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
@@ -18,6 +19,7 @@ interface BookStore {
   fetchBooks: () => Promise<void>;
   setActiveBook: (bookId: string | null) => void;
   setTheme: (theme: ThemeName) => void;
+  setFontSize: (fontSize: number) => void;
   addBook: (book: Book) => void;
   removeBook: (bookId: string) => Promise<void>;
   clearError: () => void;
@@ -59,6 +61,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
   books: [],
   activeBookId: null,
   theme: 'dark',
+  fontSize: 1.0,
   isLoading: false,
   hasLoaded: false,
   error: null,
@@ -77,6 +80,8 @@ export const useBookStore = create<BookStore>((set, get) => ({
   setActiveBook: (bookId) => set({ activeBookId: bookId }),
 
   setTheme: (theme) => set({ theme }),
+
+  setFontSize: (fontSize) => set({ fontSize }),
 
   addBook: (book) =>
     set((state) => ({

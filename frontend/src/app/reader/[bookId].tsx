@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   IconButton,
+  Menu,
   Text,
   useTheme,
 } from 'react-native-paper';
@@ -29,6 +30,11 @@ const THEME_CYCLE: Record<ThemeName, ThemeName> = {
   light: 'dark',
 };
 
+const FONT_SIZE_STEP = 0.1;
+const FONT_SIZE_MIN = 0.8;
+const FONT_SIZE_MAX = 2.0;
+const FONT_SIZE_DEFAULT = 1.0;
+
 export default function ReaderScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -36,10 +42,13 @@ export default function ReaderScreen() {
 
   const storeTheme = useBookStore((s) => s.theme);
   const setTheme = useBookStore((s) => s.setTheme);
+  const fontSize = useBookStore((s) => s.fontSize);
+  const setFontSize = useBookStore((s) => s.setFontSize);
   const setActiveBook = useBookStore((s) => s.setActiveBook);
 
   const [bookDetail, setBookDetail] = useState<BookDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [fontMenuVisible, setFontMenuVisible] = useState(false);
 
   const readerRef = useRef<ReadiumViewRef>(null);
   const pdfReaderRef = useRef<ReaderPdfRef>(null);
@@ -110,6 +119,17 @@ export default function ReaderScreen() {
     setTheme(THEME_CYCLE[storeTheme]);
   };
 
+  const decreaseFontSize = () => {
+    setFontSize(Math.max(FONT_SIZE_MIN, +(fontSize - FONT_SIZE_STEP).toFixed(2)));
+  };
+  const increaseFontSize = () => {
+    setFontSize(Math.min(FONT_SIZE_MAX, +(fontSize + FONT_SIZE_STEP).toFixed(2)));
+  };
+  const resetFontSize = () => {
+    setFontSize(FONT_SIZE_DEFAULT);
+    setFontMenuVisible(false);
+  };
+
   // Footer chevrons drive whichever renderer is mounted — the Readium ref for
   // EPUB, the setPage-adapter ref for PDF (react-native-pdf has no
   // directional API of its own).
@@ -139,6 +159,36 @@ export default function ReaderScreen() {
           >
             {bookDetail?.title ?? ''}
           </Text>
+          {bookDetail?.format === 'epub' && (
+            <Menu
+              visible={fontMenuVisible}
+              onDismiss={() => setFontMenuVisible(false)}
+              anchor={
+                <IconButton
+                  icon="format-size"
+                  onPress={() => setFontMenuVisible(true)}
+                  iconColor={theme.colors.onSurface}
+                />
+              }
+            >
+              <View style={styles.fontSizeRow}>
+                <IconButton
+                  icon="minus"
+                  onPress={decreaseFontSize}
+                  disabled={fontSize <= FONT_SIZE_MIN}
+                />
+                <Text style={styles.fontSizeLabel}>
+                  {Math.round(fontSize * 100)}%
+                </Text>
+                <IconButton
+                  icon="plus"
+                  onPress={increaseFontSize}
+                  disabled={fontSize >= FONT_SIZE_MAX}
+                />
+              </View>
+              <Menu.Item onPress={resetFontSize} title="Reset" leadingIcon="restore" />
+            </Menu>
+          )}
           <IconButton
             icon="theme-light-dark"
             onPress={cycleTheme}
@@ -226,4 +276,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fontSizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  fontSizeLabel: { minWidth: 48, textAlign: 'center' },
 });
