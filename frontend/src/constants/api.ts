@@ -1,8 +1,11 @@
-// Android emulator: backend is at 10.0.2.2:8000
-// Physical device on LAN: replace with your machine's LAN IP e.g. http://192.168.x.x:8000
-// Production (Phase 3): https://api.your-domain.com
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:8000';
+// API base URL — comes solely from EXPO_PUBLIC_API_URL (set in frontend/.env,
+// or per build profile in eas.json). No fallback: when it is unset or empty the
+// guard in services/api.ts throws, rather than silently targeting a default host.
+// Example values:
+//   Android emulator:       http://10.0.2.2:8000
+//   Physical device (LAN):  http://192.168.x.x:8000
+//   Production:              https://api.your-domain.com
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 // Must match MAX_UPLOAD_SIZE_MB env var on the backend.
 export const MAX_UPLOAD_SIZE_MB = 50;
