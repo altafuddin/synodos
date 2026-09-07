@@ -30,15 +30,35 @@ interface BookStore {
 // unreadable ones, and (b) deletes orphan local files that match no server
 // record. Any filesystem error degrades to "assume present" — never fails
 // the fetch.
+//
+// Mass-wipe guard: a successful GET /api/books that returns [] is
+// indistinguishable from a genuinely empty library, and the backend keeps no
+// copy of the original file — so wiping every local file on the strength of
+// one empty response is unrecoverable (Phase 2 makes this real: mid-migration,
+// before user_id is assigned, the endpoint legitimately returns 200 [] for a
+// user who has books). So if the orphan count equals the total local file
+// count AND at least one local file exists, all deletion is skipped and a warn
+// line records both counts. Any smaller orphan set — some local files still
+// match a server record — deletes as before, so a library the user emptied one
+// book at a time through the app still gets cleaned up. The hasLocalFile
+// mapping runs in both cases; the guard skips deletion only, not reconciliation.
 function reconcileWithLocalFiles(books: Book[]): Book[] {
   try {
     const local = listLocalBookFiles();
     const localKeys = new Set(local.map((f) => `${f.bookId}.${f.format}`));
     const serverKeys = new Set(books.map((b) => `${b.book_id}.${b.format}`));
 
-    for (const file of local) {
-      const key = `${file.bookId}.${file.format}`;
-      if (!serverKeys.has(key)) {
+    const orphans = local.filter(
+      (file) => !serverKeys.has(`${file.bookId}.${file.format}`)
+    );
+
+    if (local.length > 0 && orphans.length === local.length) {
+      log.warn('local_reconcile_mass_wipe_skipped', {
+        orphanCount: orphans.length,
+        localCount: local.length,
+      });
+    } else {
+      for (const file of orphans) {
         log.info('orphan_local_file_deleted', {
           bookId: file.bookId,
           format: file.format,
