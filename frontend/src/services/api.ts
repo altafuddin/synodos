@@ -45,6 +45,7 @@ export async function apiFetch<T>(
     throw new ApiError(response.status, message);
   }
 
+  // Note: DELETE /api/books/{id} returns 200 with a JSON body (not 204); the response.ok path above parses it and deleteBook discards it — keep both sides.
   // 204 No Content
   if (response.status === 204) {
     return undefined as T;
