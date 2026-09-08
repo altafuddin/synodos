@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,8 +10,27 @@ import { themes } from '../constants/themes';
 import { useBookStore } from '../stores/bookStore';
 
 function AppShell() {
+  // AsyncStorage rehydration is async: the store boots at its defaults
+  // (theme 'dark') and the persisted theme/fontSize land a frame or two later.
+  // Hold the first paint until then so a sepia/light user never sees a dark
+  // flash. Initialise from hasHydrated() in case rehydration already finished
+  // before this component mounted (no onFinishHydration event would fire then).
+  const [hydrated, setHydrated] = useState(() =>
+    useBookStore.persist.hasHydrated()
+  );
+  useEffect(() => {
+    if (useBookStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    return useBookStore.persist.onFinishHydration(() => setHydrated(true));
+  }, []);
+
   const theme = useBookStore((s) => s.theme);
   const paperTheme = themes[theme];
+
+  // No spinner — two small keys, and a one-frame spinner is worse than nothing.
+  if (!hydrated) return null;
 
   return (
     <PaperProvider theme={paperTheme}>

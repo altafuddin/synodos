@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Book } from '../types';
 import type { ThemeName } from '../constants/themes';
 import { deleteBook, listBooks } from '../services/books';
@@ -6,6 +8,10 @@ import { deleteBookFile, listLocalBookFiles } from '../services/fileStorage';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('bookStore');
+
+// Versioned AsyncStorage key for persisted reading preferences (theme,
+// fontSize). Bump the suffix and add a persist `migrate` fn if the shape changes.
+const PREFS_KEY = 'synodos-prefs-v1';
 
 interface BookStore {
   books: Book[];
@@ -77,52 +83,81 @@ function reconcileWithLocalFiles(books: Book[]): Book[] {
   }
 }
 
-export const useBookStore = create<BookStore>((set, get) => ({
-  books: [],
-  activeBookId: null,
-  theme: 'dark',
-  fontSize: 1.0,
-  isLoading: false,
-  hasLoaded: false,
-  error: null,
+export const useBookStore = create<BookStore>()(
+  persist(
+    (set, get) => ({
+      books: [],
+      activeBookId: null,
+      theme: 'dark',
+      fontSize: 1.0,
+      isLoading: false,
+      hasLoaded: false,
+      error: null,
 
-  fetchBooks: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const books = await listBooks();
-      set({ books: reconcileWithLocalFiles(books), isLoading: false, hasLoaded: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load books';
-      set({ error: message, isLoading: false });
+      fetchBooks: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const books = await listBooks();
+          set({ books: reconcileWithLocalFiles(books), isLoading: false, hasLoaded: true });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to load books';
+          set({ error: message, isLoading: false });
+        }
+      },
+
+      setActiveBook: (bookId) => set({ activeBookId: bookId }),
+
+      setTheme: (theme) => set({ theme }),
+
+      setFontSize: (fontSize) => set({ fontSize }),
+
+      addBook: (book) =>
+        set((state) => ({
+          books: [book, ...state.books],
+        })),
+
+      removeBook: async (bookId) => {
+        const format = get().books.find((b) => b.book_id === bookId)?.format;
+
+        await deleteBook(bookId);
+
+        set((state) => ({
+          books: state.books.filter((b) => b.book_id !== bookId),
+        }));
+
+        if (format) {
+          void deleteBookFile(bookId, format);
+        } else {
+          log.warn('remove_book_unknown_format', { bookId });
+        }
+      },
+
+      clearError: () => set({ error: null }),
+    }),
+    {
+      // Only reading preferences are persisted. books is refetched from the
+      // server on every library mount by design — persisting it would resurrect
+      // stale entries and fight reconcileWithLocalFiles; activeBookId and the
+      // isLoading/hasLoaded/error fetch flags are session state. Bump the
+      // version (and add a migrate fn) if the persisted shape ever changes.
+      name: PREFS_KEY,
+      version: 1,
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ theme: state.theme, fontSize: state.fontSize }),
+      // An unparseable stored value makes zustand's hydrate() bail in its catch
+      // path WITHOUT marking hydration finished — which would hang the _layout
+      // gate forever. Drop the bad key and re-run hydration so it completes
+      // cleanly on defaults. The `error` guard stops this recursing on the
+      // (now empty, successful) retry.
+      onRehydrateStorage: () => (_state, error) => {
+        if (!error) return;
+        log.warn('prefs_rehydrate_failed', { error: String(error) });
+        void AsyncStorage.removeItem(PREFS_KEY).then(
+          () => useBookStore.persist.rehydrate(),
+          (removeErr) =>
+            log.warn('prefs_key_purge_failed', { error: String(removeErr) })
+        );
+      },
     }
-  },
-
-  setActiveBook: (bookId) => set({ activeBookId: bookId }),
-
-  setTheme: (theme) => set({ theme }),
-
-  setFontSize: (fontSize) => set({ fontSize }),
-
-  addBook: (book) =>
-    set((state) => ({
-      books: [book, ...state.books],
-    })),
-
-  removeBook: async (bookId) => {
-    const format = get().books.find((b) => b.book_id === bookId)?.format;
-
-    await deleteBook(bookId);
-
-    set((state) => ({
-      books: state.books.filter((b) => b.book_id !== bookId),
-    }));
-
-    if (format) {
-      void deleteBookFile(bookId, format);
-    } else {
-      log.warn('remove_book_unknown_format', { bookId });
-    }
-  },
-
-  clearError: () => set({ error: null }),
-}));
+  )
+);
