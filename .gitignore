@@ -2,7 +2,6 @@ backend/.env
 backend/app.db
 backend/storage/
 backend/logs/
-backend/tests/fixtures
 __pycache__/
 frontend/.env
 frontend/node_modules/
