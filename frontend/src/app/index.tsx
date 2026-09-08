@@ -49,11 +49,14 @@ export default function LibraryScreen() {
             setDeletingId(book.book_id);
             try {
               await removeBook(book.book_id);
-              // Success: store splices the book out, the card unmounts on its
-              // own. deletingId is dropped with it — no need to reset here.
             } catch {
-              setDeletingId(null);
               setDeleteError(`Couldn't delete "${book.title}". Please try again.`);
+            } finally {
+              // Unconditional: deletingId is LibraryScreen state, not card
+              // state, and this screen is the root route that never unmounts —
+              // so the success path can't rely on the deleted card unmounting
+              // to drop it. Both paths must clear it or the :39 guard sticks.
+              setDeletingId(null);
             }
           },
         },
