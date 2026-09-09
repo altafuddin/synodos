@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { PublicationReadyEvent } from 'react-native-readium';
 import type { Locator } from '../types';
+import { ApiError } from '../services/api';
 import { reportProgress } from '../services/progress';
 import { enqueue, flushQueue, isRetryableError } from '../services/progressQueue';
 import { createLogger } from '../utils/logger';
@@ -94,12 +95,18 @@ export function useReader(bookId: string): {
       const scroll_pct = 100;
 
       log.debug('progress_reported', { unit_id, scroll_pct });
-      flushThenReport(unit_id, scroll_pct, (err) =>
-        // A 404 here is the benign sparse-manifest case (image/empty pages are
-        // skipped in the manifest). Logged at debug, not warn. Tradeoff: real
-        // network errors on this path also go to debug for now.
-        log.debug('progress_report_skipped', { unit_id, error: String(err) })
-      );
+      flushThenReport(unit_id, scroll_pct, (err) => {
+        // A 404 here is the benign sparse-manifest case (the parser skips
+        // text-empty pages, so a page can legitimately be missing from the
+        // manifest). Anything else — including a network failure, which
+        // rejects without a status — is a real error and gets a warn, same
+        // as the EPUB path.
+        if (err instanceof ApiError && err.status === 404) {
+          log.debug('progress_report_skipped', { unit_id, error: String(err) });
+        } else {
+          log.warn('progress_report_failed', { unit_id, error: String(err) });
+        }
+      });
     },
     [flushThenReport]
   );
