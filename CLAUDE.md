@@ -9,9 +9,19 @@ Synodos — an AI-powered mobile book reader. Users pick EPUB or PDF books from 
 ## Monorepo Structure
 ```
 synodos/
-├── backend/    ← FastAPI backend (complete — 33 tests in backend/tests/)
-└── frontend/   ← React Native + Expo (active development)
+├── backend/    ← FastAPI backend (Phase 1 complete — 33 tests in backend/tests/)
+└── frontend/   ← React Native + Expo (Phase 2 complete — production build in use)
 ```
+
+## Current Phase — Phase 3 (Multi-User)
+
+Phase 3 takes Synodos from single-user to multi-user: email + password auth, per-user ownership of every book, buffer, read position, and chat. Decisions are in ADR-007 (auth), ADR-008 (data ownership), ADR-009 (client session lifecycle); the layer plan is the Phase 3 Build Plan in Notion.
+
+- **All Phase 3 work happens on the `phase-3` branch.** `main` is the deployed production version and stays untouched until the final release layer. Railway deploys from `main`.
+- **Never run `npm run update:production` from `phase-3`.** `eas update` publishes the working directory regardless of git branch, so it would ship Phase 3 JS to the installed production app, which would then call auth endpoints the production backend doesn't have. Develop against Metro with `npm run dev`.
+- **Production hotfixes** go on `main`, then `main` is merged into `phase-3` straight away.
+- **Backend and production build release together.** Once the backend requires auth, the installed production app stops working, and `expo-secure-store` forces a rebuild, so the fix can't ship OTA. Nothing reaches production before the release layer.
+- **This file describes the code as it is, not as it will be.** Folder trees, the endpoint table, and env vars are updated at each layer's commit, when the files actually exist. The design rules below that are marked *(Phase 3)* describe how new code must be written.
 
 ## Backend Stack
 
@@ -106,7 +116,11 @@ All routers mount at prefix `/api/books`.
 - **Buffer** is append-only. Content is never removed or reordered.
 - **Gemini** is stateless — full context (buffer + chat history) is assembled and sent on every request.
 - **Original book file** is never stored on the server — parsed in memory and the file discarded. The extracted text is *not* discarded: `manifest.json` retains every unit's full text (`id`, `title`, `text`, `char_count`), and the buffer slice is cut from that stored copy.
-- **No authentication** — deferred to post-MVP.
+- **No authentication yet** — every endpoint is currently unauthenticated. Being added in Phase 3.
+- **Ownership (Phase 3):** a book is obtained inside a request only through the `get_owned_book` dependency. Routers never filter by `user_id` themselves. A book the caller doesn't own returns `404`, never `403`.
+- **Ownership lives on `books` only (Phase 3):** buffers, read positions, and chat messages inherit it through the book. Don't add `user_id` to other tables.
+- **Foreign keys (Phase 3):** SQLite ignores them unless `PRAGMA foreign_keys=ON` is set per connection. Cascade deletes depend on it, and its absence fails silently.
+- **Storage paths (Phase 3):** become `{STORAGE_PATH}/users/{user_id}/books/{book_id}/`. Derive them in one place.
 - All file I/O must be async (aiofiles) or run in a threadpool executor.
 - Storage path must always be read from the STORAGE_PATH env var, never hardcoded.
 
@@ -261,12 +275,13 @@ Both use the withAppBuildGradle/withAndroidManifest pattern.
 4. EPUB reader — react-native-readium, chapter nav, progress reporting, font-size control ✅ (native build was blocked on BUG-006 — see Config Plugins)
 5. PDF reader — react-native-pdf, footer page-turn buttons, fit-to-width, progress reporting ✅
 6. Chat overlay — @gorhom/bottom-sheet, SSE streaming consumer, markdown rendering, history loading, keyboard tracking ✅
-7. Polish + integration — transitions, loading states, Settings screen, OTA updates, end-to-end testing (in progress)
+7. Polish + integration — transitions, loading states, Settings screen, OTA updates, end-to-end testing ✅
 
 ## Frontend Key Design Rules
 
 - **components/** are pure UI — props in, render out. No API calls inside components.
-- **services/** is where all network and file system calls live. Never call `fetch` directly from a component.
+- **services/** is where all network and file system calls live. Never call `fetch` directly from a component. *(Phase 3)* This becomes a correctness rule: the single-flight token refresh guard lives in `services/api.ts`, so any request that bypasses `apiFetch` bypasses the guard.
+- **Chat stream auth (Phase 3):** the `EventSource` in `services/chat.ts` can't go through `apiFetch`. It must set the `Authorization` header itself and refresh the token *before* opening the stream if it's close to expiry. An SSE stream can't be transparently retried.
 - **hooks/** contains stateful behaviours that span components (reading, chat).
 - **Zustand store** is the single source of truth for shared state — library list, active book, reading theme.
 - **API base URL** always comes from `constants/api.ts` — never hardcoded elsewhere.
