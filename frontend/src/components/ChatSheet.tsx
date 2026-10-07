@@ -7,8 +7,13 @@ import {
   useState,
   type ElementRef,
 } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { Icon, Text, useTheme } from 'react-native-paper';
 import {
   BottomSheetModal,
   BottomSheetFlatList,
@@ -33,6 +38,8 @@ const log = createLogger('ChatSheet');
 
 type ChatSheetProps = {
   bookId: string;
+  chatMode: 'open' | 'strict';
+  onToggleChatMode: () => void;
 };
 
 // List clearance spacer (ListFooterComponent → lives inside the sheet, where
@@ -65,7 +72,7 @@ function ListBottomSpacer({ footerHeight }: { footerHeight: number }) {
 // Half-screen draggable chat drawer over the reader. The parent holds the ref
 // and calls .present() to open. State lives entirely in useChat.
 const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
-  ({ bookId }, ref) => {
+  ({ bookId, chatMode, onToggleChatMode }, ref) => {
     const theme = useTheme();
     const { messages, isStreaming, send } = useChat(bookId);
 
@@ -181,6 +188,36 @@ const ChatSheet = forwardRef<BottomSheetModal, ChatSheetProps>(
         handleIndicatorStyle={{ backgroundColor: theme.colors.outline }}
       >
         <View style={styles.container}>
+          {/* Chat-mode chip. Independent of isStreaming — the mode is read
+              server-side per request, so toggling mid-stream only affects the
+              next question. */}
+          <View
+            style={[
+              styles.modeRow,
+              { borderBottomColor: theme.colors.outlineVariant },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.modeChip,
+                { backgroundColor: theme.colors.surfaceVariant },
+              ]}
+              onPress={onToggleChatMode}
+              activeOpacity={0.7}
+            >
+              <Icon
+                source={chatMode === 'open' ? 'lock-open-outline' : 'lock-outline'}
+                size={14}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text
+                variant="labelSmall"
+                style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}
+              >
+                {chatMode === 'open' ? 'Open' : 'Strict'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <BottomSheetFlatList
             ref={listRef}
             style={styles.list}
@@ -230,6 +267,19 @@ ChatSheet.displayName = 'ChatSheet';
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  modeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   list: { flex: 1 },
   // Bottom clearance lives in the animated ListFooterComponent spacer (footer
   // height + keyboard). The 8 here is breathing room at the visual top.

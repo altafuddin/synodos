@@ -4,6 +4,7 @@ export interface Book {
   author: string | null;
   format: 'epub' | 'pdf';
   total_units: number;
+  chat_mode: 'open' | 'strict';
   uploaded_at: string;
   last_read_at: string | null;
   // Client-side only — set by the store's local-file reconciliation, never

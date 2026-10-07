@@ -7,6 +7,7 @@ type BookUploadResponse = {
   author: string | null;
   format: 'epub' | 'pdf';
   total_units: number;
+  chat_mode: 'open' | 'strict';
   uploaded_at: string;
 };
 
@@ -44,7 +45,7 @@ export async function deleteBook(bookId: string): Promise<void> {
 
 export async function patchBook(
   bookId: string,
-  updates: { title?: string; author?: string }
+  updates: { title?: string; author?: string; chat_mode?: 'open' | 'strict' }
 ): Promise<Book> {
   return apiFetch<Book>(`/api/books/${bookId}`, {
     method: 'PATCH',

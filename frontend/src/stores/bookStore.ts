@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Book } from '../types';
 import type { ThemeName } from '../constants/themes';
-import { deleteBook, listBooks } from '../services/books';
+import { deleteBook, listBooks, patchBook } from '../services/books';
 import { deleteBookFile, listLocalBookFiles } from '../services/fileStorage';
 import { createLogger } from '../utils/logger';
 
@@ -28,6 +28,10 @@ interface BookStore {
   setFontSize: (fontSize: number) => void;
   addBook: (book: Book) => void;
   removeBook: (bookId: string) => Promise<void>;
+  patchBookInStore: (
+    bookId: string,
+    updates: { title?: string; author?: string; chat_mode?: 'open' | 'strict' }
+  ) => Promise<void>;
   clearError: () => void;
 }
 
@@ -129,6 +133,25 @@ export const useBookStore = create<BookStore>()(
           void deleteBookFile(bookId, format);
         } else {
           log.warn('remove_book_unknown_format', { bookId });
+        }
+      },
+
+      // Optimistic: the library entry updates immediately and reverts if the
+      // PATCH fails. Rethrows after reverting so callers holding their own
+      // copy of the field (e.g. the reader's chat-mode chip) can roll back too.
+      patchBookInStore: async (bookId, updates) => {
+        const prev = get().books;
+        set((state) => ({
+          books: state.books.map((b) =>
+            b.book_id === bookId ? { ...b, ...updates } : b
+          ),
+        }));
+        try {
+          await patchBook(bookId, updates);
+        } catch (err) {
+          set({ books: prev });
+          log.warn('patch_book_failed', { bookId, error: String(err) });
+          throw err;
         }
       },
 

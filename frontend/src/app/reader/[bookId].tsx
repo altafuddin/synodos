@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -49,6 +49,11 @@ export default function ReaderScreen() {
   const [bookDetail, setBookDetail] = useState<BookDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fontMenuVisible, setFontMenuVisible] = useState(false);
+  const patchBookInStore = useBookStore((s) => s.patchBookInStore);
+  // Kept apart from bookDetail on purpose: initialLocator/initialPage are
+  // memoized on bookDetail, so writing chat_mode into it would hand the reader
+  // a fresh initialLocation and could snap it back to the opening position.
+  const [chatMode, setChatMode] = useState<'open' | 'strict'>('open');
 
   const readerRef = useRef<ReadiumViewRef>(null);
   const pdfReaderRef = useRef<ReaderPdfRef>(null);
@@ -61,7 +66,10 @@ export default function ReaderScreen() {
     (async () => {
       try {
         const detail = await getBook(bookId);
-        if (!cancelled) setBookDetail(detail);
+        if (!cancelled) {
+          setBookDetail(detail);
+          setChatMode(detail.chat_mode);
+        }
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : 'Failed to load book';
@@ -75,6 +83,17 @@ export default function ReaderScreen() {
       setActiveBook(null);
     };
   }, [bookId, setActiveBook]);
+
+  // Optimistic: the chip flips immediately; patchBookInStore reverts the
+  // library entry on failure and rethrows so the chip reverts too.
+  const toggleChatMode = useCallback(() => {
+    const prevMode = chatMode;
+    const newMode = prevMode === 'open' ? 'strict' : 'open';
+    setChatMode(newMode);
+    patchBookInStore(bookId, { chat_mode: newMode }).catch(() => {
+      setChatMode(prevMode);
+    });
+  }, [chatMode, bookId, patchBookInStore]);
 
   const initialLocator = useMemo<Locator | undefined>(() => {
     if (bookDetail?.format !== 'epub') return undefined; // EPUB-only locator
@@ -259,7 +278,12 @@ export default function ReaderScreen() {
         </View>
       </SafeAreaView>
 
-      <ChatSheet ref={chatRef} bookId={bookId} />
+      <ChatSheet
+        ref={chatRef}
+        bookId={bookId}
+        chatMode={chatMode}
+        onToggleChatMode={toggleChatMode}
+      />
     </View>
   );
 }
