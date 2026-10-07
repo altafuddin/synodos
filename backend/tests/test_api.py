@@ -314,7 +314,7 @@ class TestChatHistoryLimits:
 
         captured = {}
 
-        async def capture(book_id, question, buffer_text, chat_history, api_key):
+        async def capture(book_id, question, buffer_text, chat_history, api_key, **kwargs):
             captured["history"] = chat_history
             raise RuntimeError("stop after capture")
             yield  # pragma: no cover — makes this an async generator

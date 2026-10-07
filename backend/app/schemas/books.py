@@ -13,6 +13,7 @@ class BookUploadResponse(BaseModel):
     author: str | None
     format: Literal["epub", "pdf"]
     total_units: int
+    chat_mode: Literal["open", "strict"]
     uploaded_at: datetime
 
 
@@ -24,6 +25,7 @@ class BookListItem(BaseModel):
     author: str | None
     format: Literal["epub", "pdf"]
     total_units: int
+    chat_mode: Literal["open", "strict"]
     uploaded_at: datetime
     last_read_at: datetime | None
 
@@ -39,6 +41,7 @@ class BookDetail(BaseModel):
     current_position: str | None
     current_progression: int | None
     read_positions: dict[str, int]
+    chat_mode: Literal["open", "strict"]
     uploaded_at: datetime
     last_read_at: datetime | None
 
@@ -48,6 +51,7 @@ class BookPatch(BaseModel):
 
     title: str | None = None
     author: str | None = None
+    chat_mode: Literal["open", "strict"] | None = None
 
     @field_validator("title")
     @classmethod
@@ -58,8 +62,10 @@ class BookPatch(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one_field(self) -> "BookPatch":
-        if self.title is None and self.author is None:
-            raise ValueError("at least one of title or author must be provided")
+        if self.title is None and self.author is None and self.chat_mode is None:
+            raise ValueError(
+                "at least one of title, author, or chat_mode must be provided"
+            )
         return self
 
 

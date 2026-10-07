@@ -34,6 +34,7 @@ class Book(Base):
     current_progression = Column(Integer, nullable=True)
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_read_at = Column(DateTime, nullable=True)
+    chat_mode = Column(String, nullable=False, default="open")  # 'open' or 'strict'
 
 
 class ChatMessage(Base):
@@ -83,7 +84,27 @@ async def init_db():
                 "ON chat_messages (book_id)"
             )
         )
-    if pre_exists:
-        log.info("db_initialized")
-    else:
-        log.info("db_initialized", created_index=index_name)
+        # Same backfill problem for columns: create_all never ALTERs an
+        # existing table. Check first, then add — SQLite has no
+        # ADD COLUMN IF NOT EXISTS. The DDL DEFAULT fills existing rows.
+        column_pre_exists = (
+            await conn.execute(
+                text(
+                    "SELECT 1 FROM pragma_table_info('books') "
+                    "WHERE name = 'chat_mode'"
+                )
+            )
+        ).scalar() is not None
+        if not column_pre_exists:
+            await conn.execute(
+                text(
+                    "ALTER TABLE books ADD COLUMN chat_mode VARCHAR "
+                    "NOT NULL DEFAULT 'open'"
+                )
+            )
+    created = {}
+    if not pre_exists:
+        created["created_index"] = index_name
+    if not column_pre_exists:
+        created["added_column"] = "books.chat_mode"
+    log.info("db_initialized", **created)

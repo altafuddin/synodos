@@ -102,6 +102,7 @@ async def upload_book(
         author=book.author,
         format=book.format,
         total_units=book.total_units,
+        chat_mode=book.chat_mode,
         uploaded_at=book.uploaded_at,
     )
 
@@ -125,6 +126,7 @@ async def list_books(db: AsyncSession = Depends(get_db)):
             author=b.author,
             format=b.format,
             total_units=b.total_units,
+            chat_mode=b.chat_mode,
             uploaded_at=b.uploaded_at,
             last_read_at=b.last_read_at,
         )
@@ -153,6 +155,7 @@ async def get_book(book_id: str, db: AsyncSession = Depends(get_db)):
         current_position=book.current_position,
         current_progression=book.current_progression,
         read_positions=read_positions,
+        chat_mode=book.chat_mode,
         uploaded_at=book.uploaded_at,
         last_read_at=book.last_read_at,
     )
@@ -177,6 +180,9 @@ async def update_book(
     if patch.author is not None:
         book.author = patch.author
         changed_fields.append("author")
+    if patch.chat_mode is not None:
+        book.chat_mode = patch.chat_mode
+        changed_fields.append("chat_mode")
 
     await db.commit()
     await db.refresh(book)
@@ -196,6 +202,7 @@ async def update_book(
         current_position=book.current_position,
         current_progression=book.current_progression,
         read_positions=read_positions,
+        chat_mode=book.chat_mode,
         uploaded_at=book.uploaded_at,
         last_read_at=book.last_read_at,
     )

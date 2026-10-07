@@ -112,7 +112,14 @@ async def ask_question(
         full_response = []
         try:
             async for chunk in stream_answer(
-                book_id, request.question, buffer_text, gemini_history, GEMINI_API_KEY
+                book_id,
+                request.question,
+                buffer_text,
+                gemini_history,
+                GEMINI_API_KEY,
+                title=book.title,
+                author=book.author,
+                chat_mode=book.chat_mode,
             ):
                 full_response.append(chunk)
                 # JSON-encode the token so leading/trailing whitespace and
