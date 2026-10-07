@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   IconButton,
@@ -35,6 +35,11 @@ const FONT_SIZE_MIN = 0.8;
 const FONT_SIZE_MAX = 2.0;
 const FONT_SIZE_DEFAULT = 1.0;
 
+// Auto-hiding chrome (header + footer bars): shown by a centre tap, hidden by
+// a second centre tap or after this long without touching a bar.
+const CHROME_AUTO_HIDE_MS = 4000;
+const CHROME_ANIM_MS = 200;
+
 export default function ReaderScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -54,6 +59,14 @@ export default function ReaderScreen() {
   // memoized on bookDetail, so writing chat_mode into it would hand the reader
   // a fresh initialLocation and could snap it back to the opening position.
   const [chatMode, setChatMode] = useState<'open' | 'strict'>('open');
+
+  const [chromeVisible, setChromeVisible] = useState(false);
+  const chromeAnim = useRef(new Animated.Value(0)).current;
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Measured bar heights drive the slide distance; fallbacks cover the first
+  // frame before onLayout (bars start hidden, so a wrong guess is invisible).
+  const [headerHeight, setHeaderHeight] = useState(100);
+  const [footerHeight, setFooterHeight] = useState(100);
 
   const readerRef = useRef<ReadiumViewRef>(null);
   const pdfReaderRef = useRef<ReaderPdfRef>(null);
@@ -94,6 +107,72 @@ export default function ReaderScreen() {
       setChatMode(prevMode);
     });
   }, [chatMode, bookId, patchBookInStore]);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHide = useCallback(() => {
+    clearHideTimer();
+    hideTimerRef.current = setTimeout(() => {
+      hideTimerRef.current = null;
+      setChromeVisible(false);
+    }, CHROME_AUTO_HIDE_MS);
+  }, [clearHideTimer]);
+
+  // Arm the auto-hide whenever chrome is up — except while the font-size Menu
+  // is open (it renders in a portal outside the bars, so touches there can't
+  // reset the timer). Closing the Menu re-arms a full 4s.
+  useEffect(() => {
+    if (chromeVisible && !fontMenuVisible) scheduleHide();
+    else clearHideTimer();
+    return clearHideTimer;
+  }, [chromeVisible, fontMenuVisible, scheduleHide, clearHideTimer]);
+
+  useEffect(() => {
+    Animated.timing(chromeAnim, {
+      toValue: chromeVisible ? 1 : 0,
+      duration: CHROME_ANIM_MS,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [chromeVisible, chromeAnim]);
+
+  const toggleChrome = useCallback(() => setChromeVisible((v) => !v), []);
+
+  // Any touch on a bar (back, title, font menu, theme, chevrons, chat) restarts
+  // the 4s countdown. onTouchStart sees touches even when a child button
+  // becomes the responder. If the touch opens the font Menu, the effect above
+  // cancels this timer straight after.
+  const onChromeTouch = useCallback(() => {
+    if (chromeVisible && !fontMenuVisible) scheduleHide();
+  }, [chromeVisible, fontMenuVisible, scheduleHide]);
+
+  const headerAnimStyle = {
+    opacity: chromeAnim,
+    transform: [
+      {
+        translateY: chromeAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-headerHeight, 0],
+        }),
+      },
+    ],
+  };
+  const footerAnimStyle = {
+    opacity: chromeAnim,
+    transform: [
+      {
+        translateY: chromeAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [footerHeight, 0],
+        }),
+      },
+    ],
+  };
 
   const initialLocator = useMemo<Locator | undefined>(() => {
     if (bookDetail?.format !== 'epub') return undefined; // EPUB-only locator
@@ -164,58 +243,10 @@ export default function ReaderScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
-        <View style={styles.headerRow}>
-          <IconButton
-            icon="arrow-left"
-            onPress={() => router.back()}
-            iconColor={theme.colors.onSurface}
-          />
-          <Text
-            variant="titleMedium"
-            numberOfLines={1}
-            style={[styles.headerTitle, { color: theme.colors.onSurface }]}
-          >
-            {bookDetail?.title ?? ''}
-          </Text>
-          {bookDetail?.format === 'epub' && (
-            <Menu
-              visible={fontMenuVisible}
-              onDismiss={() => setFontMenuVisible(false)}
-              anchor={
-                <IconButton
-                  icon="format-size"
-                  onPress={() => setFontMenuVisible(true)}
-                  iconColor={theme.colors.onSurface}
-                />
-              }
-            >
-              <View style={styles.fontSizeRow}>
-                <IconButton
-                  icon="minus"
-                  onPress={decreaseFontSize}
-                  disabled={fontSize <= FONT_SIZE_MIN}
-                />
-                <Text style={styles.fontSizeLabel}>
-                  {Math.round(fontSize * 100)}%
-                </Text>
-                <IconButton
-                  icon="plus"
-                  onPress={increaseFontSize}
-                  disabled={fontSize >= FONT_SIZE_MAX}
-                />
-              </View>
-              <Menu.Item onPress={resetFontSize} title="Reset" leadingIcon="restore" />
-            </Menu>
-          )}
-          <IconButton
-            icon="theme-light-dark"
-            onPress={cycleTheme}
-            iconColor={theme.colors.onSurface}
-          />
-        </View>
-      </SafeAreaView>
 
+      {/* Body fills the whole screen; the bars overlay it rather than sharing
+          the layout, so toggling chrome never resizes (and re-paginates) the
+          reader. */}
       <View style={styles.body}>
         {bookDetail === null && loadError === null && (
           <ActivityIndicator
@@ -242,6 +273,7 @@ export default function ReaderScreen() {
             bookId={bookId}
             fileUrl={epubFileUrl}
             initialLocator={initialLocator}
+            onCenterTap={toggleChrome}
           />
         )}
 
@@ -251,32 +283,99 @@ export default function ReaderScreen() {
             bookId={bookId}
             fileUrl={pdfFileUrl}
             initialPage={initialPage}
+            onCenterTap={toggleChrome}
           />
         )}
       </View>
 
-      <SafeAreaView edges={['bottom']} style={{ backgroundColor: theme.colors.surface }}>
-        <View style={styles.footerRow}>
-          <IconButton
-            icon="chevron-left"
-            size={32}
-            onPress={goBackward}
-            iconColor={theme.colors.onSurface}
-          />
-          <IconButton
-            icon="message-text-outline"
-            size={28}
-            onPress={() => chatRef.current?.present()}
-            iconColor={theme.colors.primary}
-          />
-          <IconButton
-            icon="chevron-right"
-            size={32}
-            onPress={goForward}
-            iconColor={theme.colors.onSurface}
-          />
-        </View>
-      </SafeAreaView>
+      <Animated.View
+        style={[styles.headerBar, headerAnimStyle]}
+        pointerEvents={chromeVisible ? 'box-none' : 'none'}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        onTouchStart={onChromeTouch}
+      >
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+          <View style={styles.headerRow}>
+            <IconButton
+              icon="arrow-left"
+              onPress={() => router.back()}
+              iconColor={theme.colors.onSurface}
+            />
+            <Text
+              variant="titleMedium"
+              numberOfLines={1}
+              style={[styles.headerTitle, { color: theme.colors.onSurface }]}
+            >
+              {bookDetail?.title ?? ''}
+            </Text>
+            {bookDetail?.format === 'epub' && (
+              <Menu
+                visible={fontMenuVisible}
+                onDismiss={() => setFontMenuVisible(false)}
+                anchor={
+                  <IconButton
+                    icon="format-size"
+                    onPress={() => setFontMenuVisible(true)}
+                    iconColor={theme.colors.onSurface}
+                  />
+                }
+              >
+                <View style={styles.fontSizeRow}>
+                  <IconButton
+                    icon="minus"
+                    onPress={decreaseFontSize}
+                    disabled={fontSize <= FONT_SIZE_MIN}
+                  />
+                  <Text style={styles.fontSizeLabel}>
+                    {Math.round(fontSize * 100)}%
+                  </Text>
+                  <IconButton
+                    icon="plus"
+                    onPress={increaseFontSize}
+                    disabled={fontSize >= FONT_SIZE_MAX}
+                  />
+                </View>
+                <Menu.Item onPress={resetFontSize} title="Reset" leadingIcon="restore" />
+              </Menu>
+            )}
+            <IconButton
+              icon="theme-light-dark"
+              onPress={cycleTheme}
+              iconColor={theme.colors.onSurface}
+            />
+          </View>
+        </SafeAreaView>
+      </Animated.View>
+
+      <Animated.View
+        style={[styles.footerBar, footerAnimStyle]}
+        pointerEvents={chromeVisible ? 'box-none' : 'none'}
+        onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+        onTouchStart={onChromeTouch}
+      >
+        <SafeAreaView edges={['bottom']} style={{ backgroundColor: theme.colors.surface }}>
+          <View style={styles.footerRow}>
+            <IconButton
+              icon="chevron-left"
+              size={32}
+              onPress={goBackward}
+              iconColor={theme.colors.onSurface}
+            />
+            <IconButton
+              icon="message-text-outline"
+              size={28}
+              onPress={() => chatRef.current?.present()}
+              iconColor={theme.colors.primary}
+            />
+            <IconButton
+              icon="chevron-right"
+              size={32}
+              onPress={goForward}
+              iconColor={theme.colors.onSurface}
+            />
+          </View>
+        </SafeAreaView>
+      </Animated.View>
 
       <ChatSheet
         ref={chatRef}
@@ -293,6 +392,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { flex: 1, textAlign: 'center' },
   body: { flex: 1 },
+  headerBar: { position: 'absolute', top: 0, left: 0, right: 0 },
+  footerBar: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { PixelRatio, Platform, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Pdf, { type PdfRef } from 'react-native-pdf';
 import { useReader } from '../hooks/useReader';
@@ -18,10 +18,12 @@ type ReaderPdfProps = {
   bookId: string;
   fileUrl: string;
   initialPage?: number;
+  // Fired on a single tap in the horizontal centre third of the page.
+  onCenterTap?: () => void;
 };
 
 const ReaderPdf = forwardRef<ReaderPdfRef, ReaderPdfProps>(
-  ({ bookId, fileUrl, initialPage }, ref) => {
+  ({ bookId, fileUrl, initialPage, onCenterTap }, ref) => {
     const theme = useTheme();
     const { handlePageChanged } = useReader(bookId);
     const pdfRef = useRef<PdfRef>(null);
@@ -29,6 +31,7 @@ const ReaderPdf = forwardRef<ReaderPdfRef, ReaderPdfProps>(
     // handlers and nothing in this component renders them.
     const currentPageRef = useRef(initialPage ?? 1);
     const pageCountRef = useRef(0);
+    const widthRef = useRef(0);
 
     const turnPage = (delta: 1 | -1) => {
       const pageCount = pageCountRef.current;
@@ -53,7 +56,12 @@ const ReaderPdf = forwardRef<ReaderPdfRef, ReaderPdfProps>(
     }));
 
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        onLayout={(e) => {
+          widthRef.current = e.nativeEvent.layout.width;
+        }}
+      >
         <Pdf
           ref={pdfRef}
           source={{ uri: fileUrl }}
@@ -69,6 +77,16 @@ const ReaderPdf = forwardRef<ReaderPdfRef, ReaderPdfProps>(
             pageCountRef.current = numberOfPages;
             log.debug('pdf_page_changed', { page, numberOfPages });
             handlePageChanged(page);
+          }}
+          // Native single-tap callback — fires only for a confirmed single tap
+          // (not double-tap zoom, scroll or pinch), so no overlay is needed and
+          // nothing is intercepted. Android reports x in physical pixels
+          // (MotionEvent.getX()); iOS in points.
+          onPageSingleTap={(_page, x) => {
+            const width = widthRef.current;
+            if (width <= 0) return;
+            const xDp = Platform.OS === 'android' ? x / PixelRatio.get() : x;
+            if (xDp > width / 3 && xDp < (width * 2) / 3) onCenterTap?.();
           }}
           onError={(error) => {
             log.warn('pdf_error', { error: String(error) });
