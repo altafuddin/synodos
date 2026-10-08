@@ -14,7 +14,6 @@ from app.logging_config import setup_logging
 setup_logging()
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
 from app.routers.books import router as books_router
@@ -30,14 +29,13 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Synodos API", lifespan=lifespan)
+# Fail closed: docs are served only when ENVIRONMENT explicitly names a
+# non-production environment; unset, empty, or unrecognised values hide them.
+_DOCS_ENVIRONMENTS = {"development"}
+_show_docs = os.getenv("ENVIRONMENT", "").strip().lower() in _DOCS_ENVIRONMENTS
+_docs_kwargs = {} if _show_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Synodos API", lifespan=lifespan, **_docs_kwargs)
 
 _request_log = structlog.get_logger("synodos.request")
 

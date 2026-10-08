@@ -36,7 +36,7 @@ Phase 3 takes Synodos from single-user to multi-user: email + password auth, per
 ## Backend Folder Structure
 ```
 backend/
-├── main.py
+├── main.py                         ← FastAPI app, lifespan, request logging; docs gated on ENVIRONMENT; no CORS middleware (native-only client)
 ├── requirements.txt
 ├── pyproject.toml                  ← pytest config (asyncio_mode, pythonpath, log_file)
 ├── .env                            ← never committed
@@ -77,6 +77,7 @@ STORAGE_PATH=./storage
 DATABASE_URL=sqlite+aiosqlite:///./app.db
 MAX_UPLOAD_SIZE_MB=50
 LOG_LEVEL=INFO          # DEBUG / INFO / WARNING / ERROR — read in app/logging_config.py
+ENVIRONMENT=development # only `development` serves /docs, /redoc, /openapi.json; unset or any other value hides them (fail closed) — read in main.py
 ```
 
 ## Development Environment
