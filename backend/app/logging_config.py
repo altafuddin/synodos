@@ -14,6 +14,8 @@ import sys
 
 import structlog
 
+from app.config import settings
+
 # Resolve backend/logs/ relative to this file (app/ -> backend/), never hardcoded
 # to a CWD that depends on where uvicorn was launched.
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +25,7 @@ LOG_DIR = os.path.join(_BACKEND_DIR, "logs")
 def setup_logging() -> None:
     """Configure structlog + stdlib once, at process start."""
     os.makedirs(LOG_DIR, exist_ok=True)
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = settings.LOG_LEVEL.upper()
 
     # Processors applied to BOTH structlog records (before handoff) and, via
     # foreign_pre_chain, to foreign stdlib records — so a uvicorn line gets the

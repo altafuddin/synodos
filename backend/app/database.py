@@ -1,17 +1,28 @@
-import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 import structlog
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from app.config import settings
+
 log = structlog.get_logger("synodos.db")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./app.db")
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    # SQLite ignores foreign keys (and so ON DELETE CASCADE) unless this is set
+    # on every connection; without it, cascades fail silently. Public so the
+    # test engine in conftest.py can attach the same listener.
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
+event.listen(engine.sync_engine, "connect", set_sqlite_pragma)
 
 AsyncSessionLocal = sessionmaker(
     bind=engine,
@@ -47,14 +58,25 @@ class ChatMessage(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+# Both get_db and get_db_context open sessions from this factory, so tests swap
+# it once (set_session_factory) and code outside the request dependency, such
+# as the chat stream's post-stream write, hits the test database too.
+_session_factory = AsyncSessionLocal
+
+
+def set_session_factory(factory) -> None:
+    global _session_factory
+    _session_factory = factory
+
+
 async def get_db():
-    async with AsyncSessionLocal() as session:
+    async with _session_factory() as session:
         yield session
 
 
 @asynccontextmanager
 async def get_db_context():
-    async with AsyncSessionLocal() as session:
+    async with _session_factory() as session:
         yield session
 
 

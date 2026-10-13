@@ -5,6 +5,12 @@ import textwrap
 import zipfile
 from pathlib import Path
 
+# app.config reads env vars at import and raises without JWT_SECRET, so these
+# must be set before anything under app/ (or main) is imported. setdefault lets
+# a real value from the shell win.
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
+
 import pymupdf
 import pytest
 import pytest_asyncio

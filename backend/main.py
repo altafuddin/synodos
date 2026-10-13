@@ -3,11 +3,9 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import structlog
+
+from app.config import settings
 
 from app.logging_config import setup_logging
 
@@ -24,15 +22,14 @@ from app.routers.chat import router as chat_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    storage_path = os.getenv("STORAGE_PATH", "./storage")
-    os.makedirs(storage_path, exist_ok=True)
+    os.makedirs(settings.STORAGE_PATH, exist_ok=True)
     yield
 
 
 # Fail closed: docs are served only when ENVIRONMENT explicitly names a
 # non-production environment; unset, empty, or unrecognised values hide them.
 _DOCS_ENVIRONMENTS = {"development"}
-_show_docs = os.getenv("ENVIRONMENT", "").strip().lower() in _DOCS_ENVIRONMENTS
+_show_docs = settings.ENVIRONMENT.strip().lower() in _DOCS_ENVIRONMENTS
 _docs_kwargs = {} if _show_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 app = FastAPI(title="Synodos API", lifespan=lifespan, **_docs_kwargs)
