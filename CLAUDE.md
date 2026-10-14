@@ -37,7 +37,8 @@ Phase 3 takes Synodos from single-user to multi-user: email + password auth, per
 ```
 backend/
 ├── main.py                         ← FastAPI app, lifespan, request logging; docs gated on ENVIRONMENT; no CORS middleware (native-only client)
-├── requirements.txt
+├── requirements.in                 ← direct dependencies, unpinned — edit this one
+├── requirements.txt                ← pip-compile lock, every package pinned — generated, never hand-edited
 ├── pyproject.toml                  ← pytest config (asyncio_mode, pythonpath, log_file)
 ├── .env                            ← never committed
 ├── .env.example
@@ -93,6 +94,23 @@ conda activate synodos
 cd backend
 pip install -r requirements.txt   # install dependencies
 uvicorn main:app --reload          # start dev server (default: localhost:8000)
+```
+
+## Backend Dependencies (pip-tools)
+
+`requirements.in` lists the direct dependencies; `requirements.txt` is the lock compiled from it with pip-tools (installed in the `synodos` env, not listed in either file). Railway installs from the lock, so every build gets the exact versions the tests ran against.
+
+- **Add or remove a dependency:** edit `requirements.in`, then recompile. Existing pins are kept wherever they still satisfy the new requirements.
+- **Upgrade:** use `--upgrade-package <name>` for one package, or `--upgrade` for all of them. Run the tests before committing.
+- **Never hand-edit `requirements.txt`.** Commit it together with `requirements.in`.
+- The lock is resolved for Python 3.11, the `synodos` env's version.
+
+```bash
+cd backend
+pip-compile --strip-extras requirements.in -o requirements.txt                            # recompile after editing requirements.in
+pip-compile --strip-extras --upgrade-package fastapi requirements.in -o requirements.txt  # upgrade one package
+pip install -r requirements.txt                                                           # sync the env to the lock
+python -m pytest
 ```
 
 ## API Endpoints (8 total)
