@@ -1,10 +1,21 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
+from uuid import uuid4
 
 import structlog
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, event, text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    event,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 from app.config import settings
 
@@ -56,6 +67,37 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)            # 'user' or 'assistant'
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    google_sub = Column(String, unique=True, nullable=False)  # identity key
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    password_hash = Column(String, nullable=True)   # unused; keeps other auth methods open
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    token_hash = Column(String, nullable=False, index=True)  # SHA-256, never the raw token
+    user_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)            # set True on rotation
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="refresh_tokens")
 
 
 # Both get_db and get_db_context open sessions from this factory, so tests swap
