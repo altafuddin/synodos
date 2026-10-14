@@ -8,6 +8,8 @@ ebooklib
 beautifulsoup4
 pymupdf
 google-genai
+google-auth[requests]
+PyJWT
 structlog
 python-multipart
 aiofiles
