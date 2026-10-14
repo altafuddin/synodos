@@ -17,6 +17,7 @@ from app.database import init_db
 from app.routers.books import router as books_router
 from app.routers.progress import router as progress_router
 from app.routers.chat import router as chat_router
+from app.routers.auth import router as auth_router
 
 
 @asynccontextmanager
@@ -72,6 +73,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(books_router)
 app.include_router(progress_router)
 app.include_router(chat_router)
+app.include_router(auth_router)
 
 
 @app.get("/")
