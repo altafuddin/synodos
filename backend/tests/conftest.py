@@ -8,17 +8,21 @@ from pathlib import Path
 # app.config reads env vars at import and raises without JWT_SECRET, so these
 # must be set before anything under app/ (or main) is imported. setdefault lets
 # a real value from the shell win.
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
 
 import pymupdf
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+import app.database as database_mod
+from app.database import Base, User, get_db, set_session_factory, set_sqlite_pragma
+from app.services.auth import create_access_token
 
 
 # ---------------------------------------------------------------------------
@@ -171,22 +175,41 @@ def pdf_bytes():
 
 
 @pytest_asyncio.fixture
-async def db_session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+async def test_engine():
+    # StaticPool keeps a single connection, so every session — the request's
+    # and get_db_context's — sees the same in-memory database rather than each
+    # connection opening its own empty one.
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        echo=False,
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    # Same FK pragma as the app engine, so cascades behave as in production.
+    event.listen(engine.sync_engine, "connect", set_sqlite_pragma)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    async with async_session() as session:
-        yield session
+    yield engine
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
 
+@pytest.fixture
+def test_session_factory(test_engine):
+    return sessionmaker(bind=test_engine, class_=AsyncSession, expire_on_commit=False)
+
+
 @pytest_asyncio.fixture
-async def client(tmp_path, db_session):
+async def db_session(test_session_factory):
+    async with test_session_factory() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def client(tmp_path, db_session, test_session_factory):
     storage_path = str(tmp_path / "storage")
     os.makedirs(storage_path, exist_ok=True)
 
@@ -209,6 +232,10 @@ async def client(tmp_path, db_session):
     from main import app
 
     app.dependency_overrides[get_db] = override_get_db
+    # get_db_context (e.g. the chat stream's post-stream write) bypasses the
+    # dependency override, so point the shared session factory at the test DB.
+    orig_session_factory = database_mod._session_factory
+    set_session_factory(test_session_factory)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -217,9 +244,40 @@ async def client(tmp_path, db_session):
         yield ac
 
     app.dependency_overrides.clear()
+    set_session_factory(orig_session_factory)
     books_mod.STORAGE_PATH = orig_books
     progress_mod.STORAGE_PATH = orig_progress
     chat_mod.STORAGE_PATH = orig_chat
+
+
+@pytest_asyncio.fixture
+async def create_user(db_session):
+    """Creates a User in the test DB and returns it."""
+    async def _create(google_sub="test-sub-123", email="test@example.com", name="Test User"):
+        user = User(google_sub=google_sub, email=email, name=name)
+        db_session.add(user)
+        await db_session.flush()
+        return user
+    return _create
+
+
+@pytest.fixture
+def auth_headers():
+    """Returns a valid Authorization header dict for a given user_id."""
+    def _headers(user_id: str):
+        token = create_access_token(user_id)
+        return {"Authorization": f"Bearer {token}"}
+    return _headers
+
+
+@pytest.fixture
+def mock_google_verify(monkeypatch):
+    """Patches verify_google_token to return a fake payload instead of calling Google."""
+    def _mock(sub="test-sub-123", email="test@example.com", name="Test User"):
+        payload = {"sub": sub, "email": email, "name": name, "email_verified": True}
+        monkeypatch.setattr("app.routers.auth.verify_google_token", lambda token: payload)
+        return payload
+    return _mock
 
 
 @pytest.fixture
