@@ -9,13 +9,13 @@ Synodos — an AI-powered mobile book reader. Users pick EPUB or PDF books from 
 ## Monorepo Structure
 ```
 synodos/
-├── backend/    ← FastAPI backend (Phase 1 complete — 33 tests in backend/tests/)
+├── backend/    ← FastAPI backend (Phase 1 complete — 48 tests in backend/tests/)
 └── frontend/   ← React Native + Expo (Phase 2 complete — production build in use)
 ```
 
 ## Current Phase — Phase 3 (Multi-User)
 
-Phase 3 takes Synodos from single-user to multi-user: email + password auth, per-user ownership of every book, buffer, read position, and chat. Decisions are in ADR-007 (auth), ADR-008 (data ownership), ADR-009 (client session lifecycle); the layer plan is the Phase 3 Build Plan in Notion.
+Phase 3 takes Synodos from single-user to multi-user: Google Sign-In auth, per-user ownership of every book, buffer, read position, and chat. Decisions are in ADR-007 (auth), ADR-008 (data ownership), ADR-009 (client session lifecycle); the layer plan is the Phase 3 Build Plan in Notion.
 
 - **All Phase 3 work happens on the `phase-3` branch.** `main` is the deployed production version and stays untouched until the final release layer. Railway deploys from `main`.
 - **Never run `npm run update:production` from `phase-3`.** `eas update` publishes the working directory regardless of git branch, so it would ship Phase 3 JS to the installed production app, which would then call auth endpoints the production backend doesn't have. Develop against Metro with `npm run dev`.
@@ -50,23 +50,31 @@ backend/
 │   ├── buffer.txt
 │   └── read_positions.json
 ├── app/
-│   ├── database.py                 ← async engine, Book + ChatMessage models, get_db
+│   ├── config.py                   ← frozen settings object, reads all env vars once, loud failure on missing secrets
+│   ├── database.py                 ← async engine, models (Book, ChatMessage, User, RefreshToken), get_db, FK pragma hook, session factory
 │   ├── logging_config.py           ← structlog setup
+│   ├── dependencies/
+│   │   ├── __init__.py
+│   │   └── auth.py                 ← get_current_user (Bearer JWT)
 │   ├── routers/
+│   │   ├── auth.py                 ← google sign-in, refresh, logout, me, delete-me
 │   │   ├── books.py
 │   │   ├── progress.py
 │   │   └── chat.py
 │   ├── services/
+│   │   ├── auth.py                 ← Google ID token verify, JWT issue/verify, refresh token rotation
 │   │   ├── parser.py
 │   │   ├── buffer.py
 │   │   └── gemini.py
 │   └── schemas/
+│       ├── auth.py
 │       ├── books.py
 │       ├── progress.py
 │       └── chat.py
 └── tests/
     ├── conftest.py
     ├── test_api.py
+    ├── test_auth.py
     ├── test_buffer.py
     └── test_parser.py
 ```
@@ -79,6 +87,12 @@ DATABASE_URL=sqlite+aiosqlite:///./app.db
 MAX_UPLOAD_SIZE_MB=50
 LOG_LEVEL=INFO          # DEBUG / INFO / WARNING / ERROR — read in app/logging_config.py
 ENVIRONMENT=development # only `development` serves /docs, /redoc, /openapi.json; unset or any other value hides them (fail closed) — read in main.py
+
+# Auth (Phase 3)
+GOOGLE_CLIENT_ID=             # Google OAuth web client ID — used to verify ID tokens — required, server won't start without it
+JWT_SECRET=                   # signing key for access JWTs (refresh tokens are random, stored hashed) — required, server won't start without it
+ACCESS_TOKEN_TTL_MINUTES=15
+REFRESH_TOKEN_TTL_DAYS=30
 ```
 
 ## Development Environment
@@ -113,9 +127,9 @@ pip install -r requirements.txt                                                 
 python -m pytest
 ```
 
-## API Endpoints (8 total)
+## API Endpoints (13 total)
 
-All routers mount at prefix `/api/books`.
+The books, progress, and chat routers mount at prefix `/api/books`; the auth router mounts at `/api/auth`.
 
 | Method | Endpoint | Purpose | Returns |
 |--------|----------|---------|---------|
@@ -128,6 +142,16 @@ All routers mount at prefix `/api/books`.
 | POST | /api/books/{book_id}/chat | Ask AI (streaming) | `text/event-stream` — `data: {"token": ...}` frames, `[DONE]`, `[ERROR:<reason>]` |
 | GET | /api/books/{book_id}/chat | Load chat history | `ChatHistoryResponse` `{book_id, messages}` |
 
+### Auth endpoints (Phase 3)
+
+| Method | Endpoint | Purpose | Returns |
+|--------|----------|---------|---------|
+| POST | /api/auth/google | Verify Google ID token, upsert user, issue token pair | `TokenResponse` |
+| POST | /api/auth/refresh | Rotate refresh token, issue new pair | `TokenResponse` |
+| POST | /api/auth/logout | Revoke all refresh tokens (requires auth) | `{"detail": "Logged out"}` |
+| GET | /api/auth/me | Current user profile (requires auth) | `UserResponse` |
+| DELETE | /api/auth/me | Delete account + cascade (requires auth) | `{"detail": "Account deleted"}` |
+
 ## Key Design Rules
 
 - **Routers** handle HTTP only — validate input, call a service, return response. No logic inside routers.
@@ -135,7 +159,7 @@ All routers mount at prefix `/api/books`.
 - **Buffer** is append-only. Content is never removed or reordered.
 - **Gemini** is stateless — full context (buffer + chat history) is assembled and sent on every request.
 - **Original book file** is never stored on the server — parsed in memory and the file discarded. The extracted text is *not* discarded: `manifest.json` retains every unit's full text (`id`, `title`, `text`, `char_count`), and the buffer slice is cut from that stored copy.
-- **No authentication yet** — every endpoint is currently unauthenticated. Being added in Phase 3.
+- **Auth (Phase 3):** Google Sign-In only (ADR-007). Backend verifies Google ID tokens and issues its own JWT access + rotating refresh tokens. Auth endpoints live in `routers/auth.py`; existing book/chat/progress endpoints are still unauthenticated until Layer 2 (ownership).
 - **Ownership (Phase 3):** a book is obtained inside a request only through the `get_owned_book` dependency. Routers never filter by `user_id` themselves. A book the caller doesn't own returns `404`, never `403`.
 - **Ownership lives on `books` only (Phase 3):** buffers, read positions, and chat messages inherit it through the book. Don't add `user_id` to other tables.
 - **Foreign keys (Phase 3):** SQLite ignores them unless `PRAGMA foreign_keys=ON` is set per connection. Cascade deletes depend on it, and its absence fails silently.
@@ -152,7 +176,7 @@ Layered — one layer at a time, verified before proceeding:
 4. Books router — all 5 book endpoints
 5. Buffer service + progress router
 6. Gemini service + chat router
-7. Unit tests — 33 tests across tests/test_api.py, test_buffer.py, test_parser.py
+7. Unit tests — 48 tests across tests/test_api.py, test_auth.py, test_buffer.py, test_parser.py
 
 ---
 
